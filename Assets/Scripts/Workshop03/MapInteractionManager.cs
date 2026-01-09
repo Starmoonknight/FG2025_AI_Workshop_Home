@@ -1,0 +1,103 @@
+using UnityEngine;
+using UnityEngine.InputSystem;
+
+using PlacementMode = AI_Workshop02.PlacementMode;
+using TerrainData = AI_Workshop02.TerrainData;
+using TerrainID = AI_Workshop02.TerrainID;
+
+
+namespace AI_Workshop03
+{
+
+    public sealed class MapInteractionManager : MonoBehaviour
+    {
+        [SerializeField] 
+        private MapManager _board;
+        [SerializeField] 
+        private Renderer _groundRenderer; 
+        [SerializeField] 
+        private Transform _goalMarker;
+        [SerializeField] 
+        private InputAction _click;
+        [SerializeField] 
+        private Camera _cam;
+
+        private void OnEnable()
+        {
+            _click = new InputAction(name: "Click", type: InputActionType.Button, binding: "<Mouse>/leftButton");
+            _click.performed += OnClick;
+            _click.Enable();
+        }
+
+        private void OnDisable()
+        {
+            if (_click != null)
+            {
+                _click.performed -= OnClick;
+                _click.Disable();
+            }
+        }
+
+        private void OnClick(InputAction.CallbackContext _)
+        {
+            if (_board == null || _goalMarker == null) return;
+            if (_cam == null) _cam = Camera.main;
+            if (_cam == null) return;
+
+            Ray ray = _cam.ScreenPointToRay(Mouse.current.position.ReadValue());
+            if (!Physics.Raycast(ray, out RaycastHit hit, 500f)) return;
+
+            Collider groundCol = _groundRenderer.GetComponent<Collider>();
+            if (hit.collider != groundCol) return;
+
+            Vector2 uv = hit.textureCoord;
+            int x = Mathf.Clamp(Mathf.FloorToInt(uv.x * _board.Width), 0, _board.Width - 1);
+            int z = Mathf.Clamp(Mathf.FloorToInt(uv.y * _board.Height), 0, _board.Height - 1);
+
+            if (!_board.TryCoordToIndex(x, z, out int idx)) return;
+            if (!_board.GetWalkable(idx)) return;
+
+            _goalMarker.position = _board.IndexToWorldCenterXZ(idx, yOffset: 0f) + Vector3.up * 0.1f;
+        }
+
+    }
+
+}
+
+
+
+/*
+
+
+// Move out to other script and put aside for now.
+// Might use later if implementing click tile abilities
+
+private void OnClickPerformed(InputAction.CallbackContext context)
+{
+    if (_mainCamera == null) _mainCamera = Camera.main;
+    if (_mainCamera == null) return;
+
+    Ray ray = _mainCamera.ScreenPointToRay(Mouse.current.position.ReadValue());
+    if (!Physics.Raycast(ray, out RaycastHit hit, 500f))
+        return;
+
+    Collider quadCollider = _quadRenderer.GetComponent<Collider>();
+    if (hit.collider != quadCollider) return;
+
+    Vector2 uv = hit.textureCoord;
+
+    int cellX = Mathf.FloorToInt(uv.x * _width);
+    int cellY = Mathf.FloorToInt(uv.y * _height);
+
+    cellX = Mathf.Clamp(cellX, 0, _width - 1);
+    cellY = Mathf.Clamp(cellY, 0, _height - 1);
+
+    if (TryCoordToIndex(cellX, cellY, out int cellIndex))
+    {
+        bool newWalkable = _blocked[cellIndex]; // blocked -> make walkable, unblocked -> make blocked
+        SetWalkable(cellIndex, newWalkable);
+    }
+
+}
+
+*/
