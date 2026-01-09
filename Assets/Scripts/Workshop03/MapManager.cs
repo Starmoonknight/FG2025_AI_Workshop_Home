@@ -370,6 +370,27 @@ namespace AI_Workshop03
         }
 
 
+        public void PaintCellTint(int index, Color32 overlayColor, float strength01 = 0.35f, bool shadeLikeGrid = true, bool skipIfObstacle = true)
+        {
+            if (!IsValidCell(index)) throw new ArgumentOutOfRangeException(nameof(index));
+            if (skipIfObstacle && _blocked[index]) return; 
+
+            strength01 = Mathf.Clamp01(strength01); 
+
+            Color32 basecolor = _cellColors[index];
+            Color32 overlay = overlayColor;
+
+            if(shadeLikeGrid)
+            {
+                IndexToXY(index, out int x, out int y);
+                bool odd = ((x + y) & 1) == 1; 
+                overlay = ApplyGridShading(overlayColor, odd);
+            }
+
+
+        }
+
+
         public void ResetColorsToBase()
         {
             RebuildCellColorsFromBase();
@@ -590,37 +611,48 @@ namespace AI_Workshop03
         {
             if (_gridTexture == null) return;
 
-            if (!_flipTextureX || _flipTextureY)
+            // fast path if visuals don't need to be fliped 
+            if (!_flipTextureX && !_flipTextureY)
             {
                 _gridTexture.SetPixels32(_cellColors);
                 _gridTexture.Apply(false);
                 return;
             }
 
-            // when switching from X,Y Quad to a X,Z visuals flipped. The Plane’s UV orientation doesn’t match my cell array’s row order, fix below.
+            // when switching from XY Quad to a XZ Plane visuals flipped. The Plane’s UV orientation may not match the grid row/column order, fix is below.
             // Use DebugCornerColorTest to see what _flipTextureX/Y needs to be on.
 
             if (_texturePixels == null || _texturePixels.Length != _cellCount)
                 _texturePixels = new Color32[_cellCount];
-  
 
             for (int y = 0; y < _height; y++)
             {
-                int sourceRow = y * _width;
-                int destinationRowY = _flipTextureY ? (_height -1 -y) : y;
-                
-                int dstRow = destinationRowY * _width; 
+                int srcRowBase = y * _width;
 
-                for (int x = 0; x < _width; x++)
+                int dstRowY = _flipTextureY ? (_height -1 -y) : y;
+                int dstRowBase = dstRowY * _width;
+
+                if (!_flipTextureX)
                 {
-                    int dstX = _flipTextureX ? (_width -1 -x) : x;
-                    _texturePixels[dstRow + dstX] = _cellColors[sourceRow + x];
+                    // if only Y needed to be flipped 
+                    Array.Copy(_cellColors, srcRowBase, _texturePixels, dstRowBase, _width);
+                }
+                else
+                {
+                    for (int x = 0; x < _width; x++)
+                    {
+                        int srcIndex = srcRowBase + x;
+
+                        int dstX =  _width -1 -x;
+                        int dstIndex = dstRowBase + dstX;
+                        
+                        _texturePixels[dstIndex] = _cellColors[srcIndex];
+                    }
                 }
             }
 
             _gridTexture.SetPixels32(_texturePixels);
             _gridTexture.Apply(false); 
-
         }
 
 

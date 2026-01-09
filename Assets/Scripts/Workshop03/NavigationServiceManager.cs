@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using Unity.VisualScripting.Dependencies.Sqlite;
 using UnityEngine;
 
 
@@ -22,6 +23,8 @@ namespace AI_Workshop03
         private float _stepDelay = 0.4f;
 
         [Header("Visualization Colors")]
+        [SerializeField, Range(0,1)]
+        private float _overlayStrength;
         [SerializeField]
         private Color32 _triedColor = new(185, 0, 255, 255);    // closed,          purple
         [SerializeField]
@@ -155,6 +158,11 @@ namespace AI_Workshop03
             RemainingCost = TotalPathCost - _gCost[cell];
         }
 
+        public void PaintCellTint(int index, Color32 overlayColor, float strength01 = 0.35f, bool shadeLikeGrid = true, bool skipIfObstacle = true) 
+        {
+
+        }
+
         #endregion
 
 
@@ -275,7 +283,7 @@ namespace AI_Workshop03
                             _state[newIndex] = 1;
                             _open.Push(newIndex, _fCost[newIndex]);
 
-                            if (visualize)
+                            if (visualize && newIndex != startIndex)
                             {
                                 _mapManager.PaintCell(newIndex, _frontierColor);
                                 _mapManager.SetDebugCosts(newIndex, _gCost[newIndex], _hCost[newIndex], _fCost[newIndex]);
@@ -511,6 +519,12 @@ namespace AI_Workshop03
         #endregion
 
 
+
+        #region Visuals
+
+        
+
+        #endregion
 
 
     }
