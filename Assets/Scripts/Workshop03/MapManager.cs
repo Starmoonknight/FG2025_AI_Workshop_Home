@@ -363,12 +363,11 @@ namespace AI_Workshop03
             _textureDirty = true;
         }
 
-        public void PaintCells(ReadOnlySpan<int> indices, Color32 color, bool shadeLikeGrid = true, bool skipIfObstacle = true)
+        public void PaintMultipleCells(ReadOnlySpan<int> indices, Color32 color, bool shadeLikeGrid = true, bool skipIfObstacle = true)
         {
             for (int i = 0; i < indices.Length; i++)
                 PaintCell(indices[i], color, shadeLikeGrid, skipIfObstacle);
         }
-
 
         public void PaintCellTint(int index, Color32 overlayColor, float strength01 = 0.35f, bool shadeLikeGrid = true, bool skipIfObstacle = true)
         {
@@ -387,9 +386,15 @@ namespace AI_Workshop03
                 overlay = ApplyGridShading(overlayColor, odd);
             }
 
-
+            _cellColors[index] = LerpColor32(basecolor, overlay, strength01); 
+            _textureDirty = true;      
         }
 
+        public void PaintMultipleCellTints(ReadOnlySpan<int> indices, Color32 overlayColor, float strength01 = 0.35f, bool shadeLikeGrid = true, bool skipIfObstacle = true)
+        {
+            for (int i = 0; i < indices.Length; i++)
+                PaintCellTint(indices[i], overlayColor, strength01, shadeLikeGrid, skipIfObstacle);
+        }
 
         public void ResetColorsToBase()
         {
@@ -724,6 +729,20 @@ namespace AI_Workshop03
             byte b = (byte)Mathf.Clamp(c.b + d, 0, 255);
 
             return new Color32(r, g, b, c.a);
+        }
+
+        private static Color32 LerpColor32(Color32 a, Color32 b, float t)
+        {
+            t = Mathf.Clamp01(t);
+            int ti = Mathf.RoundToInt(t * 255f);
+            int inv = 255 - ti;
+
+            byte r = (byte)((a.r * inv + b.r * ti + 127) / 255);
+            byte g = (byte)((a.g * inv + b.g * ti + 127) / 255);
+            byte bl = (byte)((a.b * inv + b.b * ti + 127) / 255);
+
+            // should keep fully opaque for an opaque material
+            return new Color32(r, g, bl, 255);
         }
 
 

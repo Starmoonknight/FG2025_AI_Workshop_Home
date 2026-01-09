@@ -1,7 +1,6 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using Unity.VisualScripting.Dependencies.Sqlite;
 using UnityEngine;
 
 
@@ -20,33 +19,42 @@ namespace AI_Workshop03
 
         [Tooltip("Delay (seconds) between each current node' selection, for visualization.")]
         [SerializeField, Min(0f)]
-        private float _stepDelay = 0.4f;
+        private float _searchDelay = 0.4f;
+        [SerializeField, Min(0f)]
+        private float _pathDelay = 0.1f;
+
 
         [Header("Visualization Colors")]
         [SerializeField, Range(0,1)]
-        private float _overlayStrength;
+        private float _spreadOverlayStrength = 0.35f;
+        [SerializeField, Range(0,1)]
+        private float _pathOverlayStrength = 0.5f;
         [SerializeField]
-        private Color32 _triedColor = new(185, 0, 255, 255);    // closed,          purple
+        private Color32 _triedColor = new(185, 0, 255, 255);        // closed,          purple
         [SerializeField]
-        private Color32 _frontierColor = new(180, 170, 255, 255);  // open (optional), light purple-blue
+        private Color32 _frontierColor = new(180, 170, 255, 255);   // open (optional), light purple-blue
         [SerializeField]
-        private Color32 _pathColor = new(6, 225, 25, 255);     // final path,      green
+        private Color32 _pathColor = new(6, 225, 25, 255);          // final path,      green
         [SerializeField]
-        private Color32 _startColor = new(0, 255, 255, 255);    // start cell,      light blue 
+        private Color32 _startColor = new(0, 255, 255, 255);        // start cell,      light blue 
         [SerializeField]
-        private Color32 _goalColor = new(255, 255, 0, 255);    // goal cell,       yellow 
+        private Color32 _goalColor = new(255, 255, 0, 255);         // goal cell,       yellow 
 
         // Internal data
-        private int _totalCells;   // total number of cells in the grid
-        private int _searchId;     // to differentiate between searches
-        private MinHeap _open;         // open set (priority queue)
+        private int _totalCells;    // total number of cells in the grid
+        private int _searchId;      // to differentiate between searches
+        private MinHeap _open;      // open set (priority queue)
 
-        private int[] _fCost;        // total cost (g + h)
-        private int[] _gCost;        // movement cost from start to current node
-        private int[] _hCost;        // heuristic cost
-        private int[] _parent;       // parent index for path reconstruction
-        private ushort[] _seenId;       // to track which nodes have been initialized for the current search
-        private byte[] _state;        // 0 = unvisited, 1 = in open set, 2 = closed
+        private int[] _fCost;       // total cost (g + h)
+        private int[] _gCost;       // movement cost from start to current node
+        private int[] _hCost;       // heuristic cost
+        private int[] _parent;      // parent index for path reconstruction
+        private ushort[] _seenId;   // to track which nodes have been initialized for the current search
+        private byte[] _state;      // 0 = unvisited, 1 = in open set, 2 = closed
+
+
+        private Coroutine _computeCo; 
+        private Coroutine _replayCo;
 
 
         public bool IsPathComputing { get; private set; }
@@ -86,29 +94,30 @@ namespace AI_Workshop03
         {
             _totalCells = _mapManager.CellCount;
 
-            if (_fCost == null || _fCost.Length != _totalCells) _fCost = new int[_totalCells];
-            if (_gCost == null || _gCost.Length != _totalCells) _gCost = new int[_totalCells];
-            if (_hCost == null || _hCost.Length != _totalCells) _hCost = new int[_totalCells];
+            if (_fCost == null  || _fCost.Length  != _totalCells) _fCost  = new int[_totalCells];
+            if (_gCost == null  || _gCost.Length  != _totalCells) _gCost  = new int[_totalCells];
+            if (_hCost == null  || _hCost.Length  != _totalCells) _hCost  = new int[_totalCells];
             if (_parent == null || _parent.Length != _totalCells) _parent = new int[_totalCells];
             if (_seenId == null || _seenId.Length != _totalCells) _seenId = new ushort[_totalCells];
-            if (_state == null || _state.Length != _totalCells) _state = new byte[_totalCells];
+            if (_state == null  || _state.Length  != _totalCells) _state  = new byte[_totalCells];
 
             if (_open == null || _open.Capacity < _totalCells) _open = new MinHeap(_totalCells);
-
         }
 
 
         #region Public API
 
-        public void RequestPath(int startIndex, int goalIndex, Action<List<int>> onPathFound, bool visualize = false)
+        public void RequestTravelPath(
+            int startIndex, int goalIndex, Action<List<int>> onPathFound, 
+            bool visualizeAll = false, bool showFinalPath = false, bool showStartAndGaol = false)
         {
-            StopAllCoroutines();
-            StartCoroutine(AStarRoutine(startIndex, goalIndex, onPathFound, visualize));
+            StopComputerReplay();
+            _computeCo = StartCoroutine(AStarRoutine(startIndex, goalIndex, onPathFound, visualizeAll, showFinalPath, showStartAndGaol));
         }
 
         public void StartVisualPath(int startIndex, int goalIndex)
         {
-            RequestPath(startIndex, goalIndex, onPathFound: null, visualize: true);
+            RequestTravelPath(startIndex, goalIndex, onPathFound: null, visualizeAll: true);
         }
 
         public void StartVisualPathFromCenter(int minManhattan = 20)
@@ -122,7 +131,7 @@ namespace AI_Workshop03
 
         public void CancelPath(bool clearVisuals = true)
         {
-            StopAllCoroutines();
+            StopComputerReplay();
 
             IsPathComputing = false;
             CurrentPath = null;
@@ -158,10 +167,6 @@ namespace AI_Workshop03
             RemainingCost = TotalPathCost - _gCost[cell];
         }
 
-        public void PaintCellTint(int index, Color32 overlayColor, float strength01 = 0.35f, bool shadeLikeGrid = true, bool skipIfObstacle = true) 
-        {
-
-        }
 
         #endregion
 
@@ -169,7 +174,9 @@ namespace AI_Workshop03
 
         #region A* Implementation
 
-        private IEnumerator AStarRoutine(int startIndex, int goalIndex, Action<List<int>> onPathFound, bool visualize)
+        private IEnumerator AStarRoutine(
+            int startIndex, int goalIndex, Action<List<int>> onPathFound, 
+            bool visualizeAll, bool visualizeFinalPath, bool showStartAndGaol)
         {
             EnsureCapacity();
 
@@ -194,15 +201,28 @@ namespace AI_Workshop03
                 yield break;
             }
 
-            if (visualize)
+            List<PaintStep> paintSteps = null;
+
+
+            bool visualizeAny = (visualizeAll || visualizeFinalPath || showStartAndGaol);
+            bool showPath = visualizeAll || visualizeFinalPath;
+            bool showStartGoalMarkers = visualizeAll || showStartAndGaol;
+
+            if (visualizeAny)
             {
+                paintSteps = new();
                 _mapManager.ResetColorsToBase();
                 _mapManager.ClearDebugCostsTouched();
-                _mapManager.BuildVisualReachableFrom(startIndex, _allowDiagonals);
-                _mapManager.PaintCell(startIndex, _startColor);
-                _mapManager.PaintCell(goalIndex, _goalColor);
-            }
 
+                if (visualizeAll)
+                    _mapManager.BuildVisualReachableFrom(startIndex, _allowDiagonals);
+
+                if (showStartGoalMarkers)
+                {
+                    _mapManager.PaintCell(startIndex, _startColor);
+                    _mapManager.PaintCell(goalIndex, _goalColor);
+                }
+            } 
 
             NextSearchId();
             _open.Clear();
@@ -224,15 +244,16 @@ namespace AI_Workshop03
             {
                 int currentIndex = _open.PopMin();
 
-                if (_state[currentIndex] == 2) // already closed
+                if (_state[currentIndex] == 2)  // already closed
                     continue;
 
-                _state[currentIndex] = 2; // closed
-                if (visualize)
+                _state[currentIndex] = 2;       // closed
+                if (visualizeAll)
                 {
-                    _mapManager.PaintCell(currentIndex, _triedColor);
-                    _mapManager.SetDebugCosts(currentIndex, _gCost[currentIndex], _hCost[currentIndex], _fCost[currentIndex]);
-                    if (_stepDelay > 0f) yield return new WaitForSeconds(_stepDelay);
+                    // adding closed node (current) to the visuals
+                    if (currentIndex != startIndex && currentIndex != goalIndex)
+                        paintSteps.Add(new PaintStep(currentIndex, _triedColor, _spreadOverlayStrength, StepPhase.Search, 
+                            true, _gCost[currentIndex], _hCost[currentIndex], _fCost[currentIndex]));
                 }
 
                 if (currentIndex == goalIndex)
@@ -283,17 +304,19 @@ namespace AI_Workshop03
                             _state[newIndex] = 1;
                             _open.Push(newIndex, _fCost[newIndex]);
 
-                            if (visualize && newIndex != startIndex)
+                            if (visualizeAll)
                             {
-                                _mapManager.PaintCell(newIndex, _frontierColor);
-                                _mapManager.SetDebugCosts(newIndex, _gCost[newIndex], _hCost[newIndex], _fCost[newIndex]);
+                                // adding frontier node to the visuals (neighbor pushed into open)
+                                if (newIndex != startIndex && newIndex != goalIndex)
+                                    paintSteps.Add(new PaintStep(newIndex, _frontierColor, _spreadOverlayStrength, StepPhase.Marker, 
+                                        true, _gCost[newIndex], _hCost[newIndex], _fCost[newIndex]));
                             }
                         }
                         else
                         {
                             _open.DecreaseKeyIfBetter(newIndex, _fCost[newIndex]);
 
-                            if (visualize)
+                            if (visualizeAny)
                             {
                                 _mapManager.SetDebugCosts(newIndex, _gCost[newIndex], _hCost[newIndex], _fCost[newIndex]);
                             }
@@ -313,20 +336,35 @@ namespace AI_Workshop03
             CurrentPath = path;
 
             IsPathComputing = false;
+            _computeCo = null;
             CurrentWaypointIndex = 0;
             TotalPathCost = _gCost[goalIndex];
             RemainingCost = TotalPathCost;
             onPathFound?.Invoke(path);
 
-            if (visualize)
+            // extra safety, ensure list exists if going to add steps
+            if ((showPath || visualizeAny) && paintSteps == null)
+                paintSteps = new List<PaintStep>();
+
+            if (showPath)
             {
                 for (int i = 0; i < path.Count; i++)
                 {
-                    _mapManager.PaintCell(path[i], _pathColor);
-                    _mapManager.SetDebugCosts(path[i], _gCost[path[i]], _hCost[path[i]], _fCost[path[i]]);
-                    if (_stepDelay > 0f) yield return new WaitForSeconds(_stepDelay);
+                    int idx = path[i]; 
+                    paintSteps.Add(new PaintStep(idx, _pathColor, _pathOverlayStrength, StepPhase.Path, 
+                        true, _gCost[idx], _hCost[idx], _fCost[idx])); 
                 }
             }
+            if (visualizeAny)
+            {
+                if (_replayCo != null) 
+                { 
+                    StopCoroutine(_replayCo);
+                    _replayCo = null;
+                }
+                _replayCo = StartCoroutine(ReplayPaintStepsCoroutine(paintSteps, startIndex, goalIndex, showStartGoalMarkers)); 
+            }
+
         }
 
 
@@ -396,6 +434,21 @@ namespace AI_Workshop03
                 // Manhattan distance
                 return minStraightMove * (distanceX + distanceY);
             }
+        }
+
+        #endregion
+
+
+
+        #region Internal Helpers
+
+        private void StopComputerReplay()
+        {
+            if (_computeCo != null) { StopCoroutine(_computeCo); _computeCo = null; }
+            if (_replayCo != null) { StopCoroutine(_replayCo); _replayCo = null; }
+
+            IsPathComputing = false;
+            IsVisualizing = false;
         }
 
         #endregion
@@ -522,9 +575,63 @@ namespace AI_Workshop03
 
         #region Visuals
 
-        
+        private IEnumerator ReplayPaintStepsCoroutine(List<PaintStep> steps, int startIndex, int goalIndex, bool showStartGoal)
+        {
+            IsVisualizing = true; 
+
+            for (int i = 0; i < steps.Count; i++) 
+            {
+                var step = steps[i];
+
+                _mapManager.PaintCellTint(step.Index, step.Color, step.TintStrength);
+                if (step.WriteCosts)
+                    _mapManager.SetDebugCosts(step.Index, _gCost[step.Index], _hCost[step.Index], _fCost[step.Index]);
+
+                float delay = (step.Phase == StepPhase.Search) ? _searchDelay
+                    : (step.Phase == StepPhase.Path) ? _pathDelay
+                    : 0f;
+
+                if (delay > 0f) yield return new WaitForSeconds(delay);
+            }
+
+            if (showStartGoal)
+            {
+                _mapManager.PaintCell(startIndex, _startColor);
+                _mapManager.PaintCell(goalIndex, _goalColor);
+            }
+
+            IsVisualizing = false;
+            _replayCo = null;
+        }
+
+
+        private enum StepPhase : byte { Search, Path, Marker }
+
+        private readonly struct PaintStep
+        {
+            public readonly int Index; 
+            public readonly Color32 Color; 
+            public readonly float TintStrength; 
+            public readonly StepPhase Phase;
+            public readonly bool WriteCosts;
+            public readonly int GCost, HCost, FCost;
+
+            public PaintStep(int index, Color32 color, float tintStrength, StepPhase phase, bool writeCost, int g, int h, int f)
+            {
+                Index = index;
+                Color = color;
+                TintStrength = tintStrength;
+                Phase = phase; 
+                WriteCosts = writeCost;
+                GCost = g;
+                HCost = h;
+                FCost = f;
+            }
+        }
+
 
         #endregion
+
 
 
     }

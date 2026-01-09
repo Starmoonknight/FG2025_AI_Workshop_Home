@@ -31,8 +31,14 @@ namespace AI_Workshop03
         private int _minManhattanClampMin = 2;
         [SerializeField, Min(0)]
         private int _minManhattanClampMax = 200; // safety
+
+        [Header("Visualization")]
         [SerializeField]
-        private bool _visualizeSearch = true;
+        private bool _visualizeAll = true;          // show pathfinding + path + start/goal tiles
+        [SerializeField]
+        private bool _visualizeFinalPath = true;    // show path
+        [SerializeField]
+        private bool _showStartAndGaol = true;      // show path start/goal tiles
 
         private List<int> _pathIndices;
         private int _pathCursor;
@@ -113,7 +119,7 @@ namespace AI_Workshop03
         FoundPair:
 
             transform.position = WorldFromIndex(_startIndex);
-            _navigationService.RequestPath(_startIndex, _goalIndex, OnPathFound, _visualizeSearch);
+            _navigationService.RequestTravelPath(_startIndex, _goalIndex, OnPathFound, _visualizeAll, _visualizeFinalPath, _showStartAndGaol);
         }
 
         private void OnPathFound(List<int> path)

@@ -279,8 +279,8 @@ MonoBehaviour:
   _mainCamera: {fileID: 1352866328}
   _cameraPadding: 1
   _boardRenderer: {fileID: 7347946356751452807}
-  _width: 50
-  _height: 50
+  _width: 500
+  _height: 500
   _flipTextureX: 1
   _flipTextureY: 1
   _seed: 0
@@ -339,13 +339,16 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::AI_Workshop03.NavigationServiceManager
   _mapManager: {fileID: 925457158}
   _allowDiagonals: 1
-  _stepDelay: 0.01
+  _searchDelay: 0.01
+  _pathDelay: 0.005
+  _spreadOverlayStrength: 0.35
+  _pathOverlayStrength: 0.5
   _triedColor:
     serializedVersion: 2
     rgba: 4294901945
   _frontierColor:
     serializedVersion: 2
-    rgba: 4294945460
+    rgba: 4294932660
   _pathColor:
     serializedVersion: 2
     rgba: 4279886086
@@ -643,7 +646,9 @@ MonoBehaviour:
   _minManhattanFactor: 0.3
   _minManhattanClampMin: 2
   _minManhattanClampMax: 200
-  _visualizeSearch: 1
+  _visualizeAll: 1
+  _visualizeFinalPath: 1
+  _showStartAndGaol: 1
 --- !u!1001 &7347946356751452806
 PrefabInstance:
   m_ObjectHideFlags: 0
