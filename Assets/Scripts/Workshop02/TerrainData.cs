@@ -83,8 +83,8 @@ namespace AI_Workshop02
         {
             AvgSize = 120,
             SizeJitter = 60,
-            MinBlobs = 6,
-            MaxBlobs = 30,
+            MinSeparateBlobs = 6,
+            MaxSeparateBlobs = 30,
             ExpansionChance = 0.55f,
             SmoothPasses = 1
         };
@@ -92,8 +92,8 @@ namespace AI_Workshop02
         [Header("Lichtenberg Params")]
         public LichtenbergParams Lichtenberg = new LichtenbergParams
         {
-            MinPaths = 4,
-            MaxPaths = 16,
+            MinSeperatePaths = 4,
+            MaxSeparatePaths = 16,
             CellsPerPath = 180,
             StepsScale = 1.8f,
             MaxWalkers = 14,
@@ -128,10 +128,10 @@ namespace AI_Workshop02
             [Min(0)] public int SizeJitter;
 
             [InspectorName("Min Blob Count")]
-            [Min(0)] public int MinBlobs;
+            [Min(0)] public int MinSeparateBlobs;
 
             [InspectorName("Max Blob Count")]
-            [Min(0)] public int MaxBlobs;
+            [Min(0)] public int MaxSeparateBlobs;
 
             [InspectorName("Grow Chance (0-1)")]
             [Tooltip("During blob expansion: chance to accept each neighbor while growing.")]
@@ -145,10 +145,10 @@ namespace AI_Workshop02
         [System.Serializable] public struct LichtenbergParams 
         {
             [InspectorName("Min Path Count")] 
-            [Min(0)] public int MinPaths;
+            [Min(0)] public int MinSeperatePaths;
 
             [InspectorName("Max Path Count")] 
-            [Min(0)] public int MaxPaths;
+            [Min(0)] public int MaxSeparatePaths;
 
             [InspectorName("Cells Per Path (target)")]
             [Tooltip("Used to estimate pathCount = desiredCells / CellsPerPath.")] 
@@ -194,13 +194,13 @@ namespace AI_Workshop02
             Blob.AvgSize = Mathf.Max(1, Blob.AvgSize);
             Blob.SizeJitter = Mathf.Max(0, Blob.SizeJitter);
 
-            if (Blob.MaxBlobs < Blob.MinBlobs)
-                Blob.MaxBlobs = Blob.MinBlobs;
+            if (Blob.MaxSeparateBlobs < Blob.MinSeparateBlobs)
+                Blob.MaxSeparateBlobs = Blob.MinSeparateBlobs;
 
             Lichtenberg.CellsPerPath = Mathf.Max(1, Lichtenberg.CellsPerPath);
 
-            if (Lichtenberg.MaxPaths < Lichtenberg.MinPaths)
-                Lichtenberg.MaxPaths = Lichtenberg.MinPaths;
+            if (Lichtenberg.MaxSeparatePaths < Lichtenberg.MinSeperatePaths)
+                Lichtenberg.MaxSeparatePaths = Lichtenberg.MinSeperatePaths;
 
             Lichtenberg.MaxWalkers = Mathf.Clamp(Lichtenberg.MaxWalkers, 1, 64);
         }

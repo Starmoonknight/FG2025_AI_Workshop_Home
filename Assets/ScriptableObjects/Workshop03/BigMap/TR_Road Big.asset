@@ -10,7 +10,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 8e87f334da9cd5f4aad1499f234d37e1, type: 3}
-  m_Name: TR_Road2
+  m_Name: TR_Road Big
   m_EditorClassIdentifier: Assembly-CSharp::AI_Workshop02.TerrainRule
   DisplayName: Road2
   VisualPrefab: {fileID: 0}
@@ -22,7 +22,7 @@ MonoBehaviour:
   IsObstacle: 0
   ForceUnblockedSeed: 0
   Mode: 2
-  CoveragePercent: 0.08
+  CoveragePercent: 0.1
   AllowOverwriteObstacle: 0
   OnlyAffectBase: 1
   AllowOverwriteTerrain: 0
@@ -32,25 +32,25 @@ MonoBehaviour:
   Blob:
     AvgSize: 120
     SizeJitter: 60
-    MinSeparateBlobs: 6
-    MaxSeparateBlobs: 30
+    MinBlobs: 6
+    MaxBlobs: 30
     ExpansionChance: 0.55
     SmoothPasses: 1
   Lichtenberg:
-    MinSeperatePaths: 4
-    MaxSeparatePaths: 16
-    CellsPerPath: 40
-    StepsScale: 3
+    MinPaths: 2
+    MaxPaths: 5
+    CellsPerPath: 120
+    StepsScale: 4
     MaxWalkers: 3
     GrowthTowardTargetBias: 0.7
-    BranchChance: 0.05
-    WidenPasses: 0
+    BranchChance: 0.1
+    WidenPasses: 2
     PreferUnusedCells: 1
     AllowReuseIfStuck: 1
     RequireOppositeEdgePair: 1
-    RepelStrength: 3
-    RepelRadius: 4
+    RepelStrength: 10
+    RepelRadius: 8
     HeatAdd: 5
     HeatFalloff: 2
     RepelFromExisting: 1
-    ExistingPenalty: 8
+    ExistingPenalty: 16

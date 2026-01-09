@@ -209,7 +209,7 @@ namespace AI_Workshop02
 
             int avgSize = Mathf.Max(1, terrain.Blob.AvgSize);
             int blobCount = desiredCells / avgSize;
-            blobCount = Mathf.Clamp(blobCount, terrain.Blob.MinBlobs, terrain.Blob.MaxBlobs);
+            blobCount = Mathf.Clamp(blobCount, terrain.Blob.MinSeparateBlobs, terrain.Blob.MaxSeparateBlobs);
 
             for (int b = 0; b < blobCount; b++)
             {
@@ -240,7 +240,7 @@ namespace AI_Workshop02
 
             int perPath = Mathf.Max(1, terrain.Lichtenberg.CellsPerPath);
             int pathCount = desiredCells / perPath;
-            pathCount = Mathf.Clamp(pathCount, terrain.Lichtenberg.MinPaths, terrain.Lichtenberg.MaxPaths);
+            pathCount = Mathf.Clamp(pathCount, terrain.Lichtenberg.MinSeperatePaths, terrain.Lichtenberg.MaxSeparatePaths);
 
             int maxSteps = Mathf.RoundToInt((_width + _height) * terrain.Lichtenberg.StepsScale);
 

@@ -35,7 +35,9 @@ namespace AI_Workshop03
 
         [Header("Map Generation Settings")]
         [SerializeField]
-        private int _seed;
+        private int _seed = 0;
+        [SerializeField] 
+        private int _lastGeneratedSeed = 0;
         [SerializeField, Range(0f, 1f)]
         private float _minUnblockedPercent = 0.5f;
         [SerializeField, Range(0f, 1f)]
@@ -54,6 +56,11 @@ namespace AI_Workshop03
         [SerializeField] private GameObject _obstacleCubePrefab;
         [SerializeField] private Transform _obstacleRoot;
         private GameObject[] _obstacleInstances;
+
+        [Header("Debug Seed HUD")]
+        [SerializeField] private bool _showSeedHud = true;
+        [SerializeField] private TMPro.TextMeshProUGUI _seedHudLabel;
+        [SerializeField] private string _seedHudPrefix = "Seed: ";
 
         [Header("Debug A* Costs Overlay")]
         [SerializeField]
@@ -107,6 +114,7 @@ namespace AI_Workshop03
         public int Height => _height;
         public int CellCount => _cellCount;
         public int MinTerrainCost => _minTerrainCost;
+        public int LastGeneratedSeed => _lastGeneratedSeed;
 
 
 
@@ -475,6 +483,10 @@ namespace AI_Workshop03
             int genSeed = baseSeed;
             int goalSeed = baseSeed ^ unchecked((int)0x9E3779B9);       // salted seed
 
+            _lastGeneratedSeed = baseSeed;
+            Debug.Log($"[MapManager] Generated map with seed={baseSeed} (genSeed={genSeed})");
+            UpdateSeedHud();
+
             _goalRng = new System.Random(goalSeed);
 
             // Initialize all cells as walkable with default terrain cost
@@ -757,6 +769,15 @@ namespace AI_Workshop03
                 throw new OverflowException("Grid too large for int indexing.");
         }
 
+        private void UpdateSeedHud()
+        {
+            if (!_showSeedHud) return;
+            if (_seedHudLabel == null) return;
+
+            string mode = (_seed == 0) ? " (random)" : "";
+            _seedHudLabel.text = $"{_seedHudPrefix}{_lastGeneratedSeed}{mode}";
+        }
+
 
         private void FitCameraOrthoTopDown()
         {
@@ -802,6 +823,23 @@ namespace AI_Workshop03
             _textureDirty = true;
             FlushTexture();
         }
+
+
+        [ContextMenu("Seed/Copy LastGeneratedSeed -> Seed")]
+        private void CopyLastSeedToSeed()
+        {
+            _seed = _lastGeneratedSeed;
+            Debug.Log($"[MapManager] Copied last seed {_lastGeneratedSeed} into _seed.");
+        }
+
+
+        [ContextMenu("Seed/Copy LastGeneratedSeed -> Clipboard")]
+        private void CopyLastSeedToClipboard()
+        {
+            UnityEditor.EditorGUIUtility.systemCopyBuffer = _lastGeneratedSeed.ToString();
+            Debug.Log($"[MapManager] Copied seed {_lastGeneratedSeed} to clipboard.");
+        }
+
 #endif
 
     }

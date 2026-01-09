@@ -10,19 +10,19 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 8e87f334da9cd5f4aad1499f234d37e1, type: 3}
-  m_Name: TR_Road2
+  m_Name: TR-O_Mountain Big
   m_EditorClassIdentifier: Assembly-CSharp::AI_Workshop02.TerrainRule
-  DisplayName: Road2
-  VisualPrefab: {fileID: 0}
+  DisplayName: Mountain2
+  VisualPrefab: {fileID: 7085790032899024548, guid: 18b912f5b130a05488e9692533682161, type: 3}
   Color:
     serializedVersion: 2
-    rgba: 3364012249
-  Cost: 6
+    rgba: 4282137675
+  Cost: 10
   TerrainID: 0
-  IsObstacle: 0
+  IsObstacle: 1
   ForceUnblockedSeed: 0
   Mode: 2
-  CoveragePercent: 0.08
+  CoveragePercent: 0.2
   AllowOverwriteObstacle: 0
   OnlyAffectBase: 1
   AllowOverwriteTerrain: 0
@@ -32,25 +32,25 @@ MonoBehaviour:
   Blob:
     AvgSize: 120
     SizeJitter: 60
-    MinSeparateBlobs: 6
-    MaxSeparateBlobs: 30
+    MinBlobs: 6
+    MaxBlobs: 30
     ExpansionChance: 0.55
     SmoothPasses: 1
   Lichtenberg:
-    MinSeperatePaths: 4
-    MaxSeparatePaths: 16
-    CellsPerPath: 40
-    StepsScale: 3
-    MaxWalkers: 3
-    GrowthTowardTargetBias: 0.7
-    BranchChance: 0.05
-    WidenPasses: 0
+    MinPaths: 18
+    MaxPaths: 90
+    CellsPerPath: 1200
+    StepsScale: 4
+    MaxWalkers: 20
+    GrowthTowardTargetBias: 0.52
+    BranchChance: 0.2
+    WidenPasses: 4
     PreferUnusedCells: 1
-    AllowReuseIfStuck: 1
-    RequireOppositeEdgePair: 1
-    RepelStrength: 3
+    AllowReuseIfStuck: 0
+    RequireOppositeEdgePair: 0
+    RepelStrength: 5
     RepelRadius: 4
-    HeatAdd: 5
+    HeatAdd: 4
     HeatFalloff: 2
     RepelFromExisting: 1
     ExistingPenalty: 8

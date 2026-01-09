@@ -316,9 +316,10 @@ namespace AI_Workshop03
                         {
                             _open.DecreaseKeyIfBetter(newIndex, _fCost[newIndex]);
 
-                            if (visualizeAny)
+                            if (visualizeAll)
                             {
-                                _mapManager.SetDebugCosts(newIndex, _gCost[newIndex], _hCost[newIndex], _fCost[newIndex]);
+                                paintSteps.Add(new PaintStep(newIndex, default, 0f, StepPhase.Marker,
+                                    writeCost: true, _gCost[newIndex], _hCost[newIndex], _fCost[newIndex]));
                             }
                         }
                     }
@@ -583,9 +584,10 @@ namespace AI_Workshop03
             {
                 var step = steps[i];
 
-                _mapManager.PaintCellTint(step.Index, step.Color, step.TintStrength);
+                if (step.TintStrength > 0f)
+                    _mapManager.PaintCellTint(step.Index, step.Color, step.TintStrength);
                 if (step.WriteCosts)
-                    _mapManager.SetDebugCosts(step.Index, _gCost[step.Index], _hCost[step.Index], _fCost[step.Index]);
+                    _mapManager.SetDebugCosts(step.Index, step.GCost, step.HCost, step.FCost);
 
                 float delay = (step.Phase == StepPhase.Search) ? _searchDelay
                     : (step.Phase == StepPhase.Path) ? _pathDelay

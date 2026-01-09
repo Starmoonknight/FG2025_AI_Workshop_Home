@@ -10,19 +10,19 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 8e87f334da9cd5f4aad1499f234d37e1, type: 3}
-  m_Name: TR_Road2
+  m_Name: TR_Mud Big
   m_EditorClassIdentifier: Assembly-CSharp::AI_Workshop02.TerrainRule
-  DisplayName: Road2
+  DisplayName: Mud2
   VisualPrefab: {fileID: 0}
   Color:
     serializedVersion: 2
-    rgba: 3364012249
-  Cost: 6
+    rgba: 3362421602
+  Cost: 16
   TerrainID: 0
   IsObstacle: 0
   ForceUnblockedSeed: 0
-  Mode: 2
-  CoveragePercent: 0.08
+  Mode: 1
+  CoveragePercent: 0.3
   AllowOverwriteObstacle: 0
   OnlyAffectBase: 1
   AllowOverwriteTerrain: 0
@@ -30,26 +30,26 @@ MonoBehaviour:
   Static:
     ScatterBias: 0.55
   Blob:
-    AvgSize: 120
+    AvgSize: 800
     SizeJitter: 60
-    MinSeparateBlobs: 6
-    MaxSeparateBlobs: 30
-    ExpansionChance: 0.55
+    MinBlobs: 10
+    MaxBlobs: 30
+    ExpansionChance: 0.7
     SmoothPasses: 1
   Lichtenberg:
-    MinSeperatePaths: 4
-    MaxSeparatePaths: 16
-    CellsPerPath: 40
-    StepsScale: 3
-    MaxWalkers: 3
-    GrowthTowardTargetBias: 0.7
-    BranchChance: 0.05
+    MinPaths: 4
+    MaxPaths: 16
+    CellsPerPath: 180
+    StepsScale: 1.8
+    MaxWalkers: 18
+    GrowthTowardTargetBias: 0.72
+    BranchChance: 0.18
     WidenPasses: 0
     PreferUnusedCells: 1
     AllowReuseIfStuck: 1
     RequireOppositeEdgePair: 1
-    RepelStrength: 3
-    RepelRadius: 4
+    RepelStrength: 2
+    RepelRadius: 1
     HeatAdd: 5
     HeatFalloff: 2
     RepelFromExisting: 1

@@ -214,7 +214,7 @@ namespace AI_Workshop03
 
             int avgSize = Mathf.Max(1, terrain.Blob.AvgSize);
             int blobCount = desiredCells / avgSize;
-            blobCount = Mathf.Clamp(blobCount, terrain.Blob.MinBlobs, terrain.Blob.MaxBlobs);
+            blobCount = Mathf.Clamp(blobCount, terrain.Blob.MinSeparateBlobs, terrain.Blob.MaxSeparateBlobs);
 
             for (int b = 0; b < blobCount; b++)
             {
@@ -245,7 +245,7 @@ namespace AI_Workshop03
 
             int perPath = Mathf.Max(1, terrain.Lichtenberg.CellsPerPath);
             int pathCount = desiredCells / perPath;
-            pathCount = Mathf.Clamp(pathCount, terrain.Lichtenberg.MinPaths, terrain.Lichtenberg.MaxPaths);
+            pathCount = Mathf.Clamp(pathCount, terrain.Lichtenberg.MinSeperatePaths, terrain.Lichtenberg.MaxSeparatePaths);
 
             int maxSteps = Mathf.RoundToInt((_width + _height) * terrain.Lichtenberg.StepsScale);
 
@@ -263,8 +263,8 @@ namespace AI_Workshop03
                 }
                 else
                 {
-                    if (!TryPickRandomEdgeValidCell(terrain, out int startIdx, 256)) break;
-                    if (!TryPickRandomEdgeValidCell(terrain, out int goalIdx, 256)) break;
+                    if (!TryPickRandomValidCell(terrain, out int startIdx, 256)) break;
+                    if (!TryPickRandomValidCell(terrain, out int goalIdx, 256)) break;
                     start = startIdx;
                     goal = goalIdx;
                 }
@@ -657,6 +657,23 @@ namespace AI_Workshop03
                 return true;
             }
 
+            return false;
+        }
+
+        private bool TryPickRandomInteriorValidCell(TerrainData terrain, int margin, out int index, int tries)
+        {
+            index = -1;
+            margin = Mathf.Clamp(margin, 0, Mathf.Min(_width, _height) / 2);
+
+            for (int t = 0; t < tries; t++)
+            {
+                int x = _rng.Next(margin, _width - margin);
+                int y = _rng.Next(margin, _height - margin);
+                int i = CoordToIndex(x, y);
+                if (!CanPickCell(terrain, i)) continue;
+                index = i;
+                return true;
+            }
             return false;
         }
 
