@@ -36,7 +36,7 @@ namespace AI_Workshop02
         private System.Random _goalRng;
 
         [Header("Generation Data")]
-        [SerializeField] private TerrainData[] _terrainData;
+        [SerializeField] private TerrainTypeData[] _terrainData;
 
 
         private readonly BoardGenerator _generator = new BoardGenerator();

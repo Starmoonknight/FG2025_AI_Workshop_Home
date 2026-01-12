@@ -1,10 +1,18 @@
 using System;
 using System.Collections.Generic;
+using System.Text;
 using UnityEngine;
 
-using TerrainData = AI_Workshop02.TerrainData;
+using static AI_Workshop02.TerrainTypeData;
+using ExpansionAreaFocus = AI_Workshop02.ExpansionAreaFocus;
+using LichtenbergEdgePairMode = AI_Workshop02.LichtenbergEdgePairMode; 
 using PlacementMode = AI_Workshop02.PlacementMode;
 using TerrainID = AI_Workshop02.TerrainID;
+using TerrainTypeData = AI_Workshop02.TerrainTypeData;
+
+#if UNITY_EDITOR
+using UnityEditor;
+#endif
 
 
 namespace AI_Workshop03
@@ -12,14 +20,15 @@ namespace AI_Workshop03
 
     public sealed class GenScratch
     {
-        public int[] heat;
-        public int[] queue;
-        public int[] stamp;
+        public int[] heat;      // temp int storage
+        public int[] poolPos;   // temp int storage
+        public int[] queue;     // buffer
         public int stampId;
 
-        public int[] used;
+        public int[] stamp;     // stamp based marker
+        public int[] used;      // stamp based marker
         public readonly List<int> cells = new(4096);
-        public readonly List<int> temp = new(2048);
+        public readonly List<int> temp = new(2048);     // buffer
     }
 
 
@@ -44,10 +53,25 @@ namespace AI_Workshop03
 
         private System.Random _rng;
 
+
+        public bool Debug_DumpFocusWeights { get; set; } = false;
+        public bool Debug_DumpFocusWeightsVerbose { get; set; } = false;
+
+
         private static readonly (int dirX, int dirY)[] Neighbors4 =
         {
             (-1, 0), ( 1, 0), (0, -1), (0,  1)
         };
+
+        private static readonly (int dirX, int dirY)[] Neighbors8 =
+        {
+            (-1, 0), ( 1, 0), (0, -1), (0,  1),
+            (-1,-1), (-1, 1), (1, -1), (1,  1)
+        };
+
+        private static int OppositeSide(int side) => side ^ 1; // 0<->1, 2<->3
+
+
 
         public void Generate(
             int width,
@@ -60,7 +84,7 @@ namespace AI_Workshop03
             Color32 baseWalkableColor,
             int baseWalkableCost,
             int seed,
-            TerrainData[] terrainData,
+            TerrainTypeData[] terrainData,
             int maxGenerateAttempts,
             float minUnblockedPercent,
             float minReachablePercent,
@@ -88,14 +112,18 @@ namespace AI_Workshop03
 
             _rng = new System.Random(seed);
 
-            terrainData ??= Array.Empty<TerrainData>();
+            terrainData ??= Array.Empty<TerrainTypeData>();
+
+
+            // --- Generate Debug Data  ---
+            DebugDumpFocusWeights(seed, terrainData);
 
 
             // --- Organize all terrains in use  ---
             Array.Sort(terrainData, (a, b) => (a?.Order ?? 0).CompareTo(b?.Order ?? 0));
 
 
-            var terrainDataId = new Dictionary<TerrainData, byte>(terrainData.Length);            // terrainId is assigned by list order after sorting, 0 reserved for base
+            var terrainDataId = new Dictionary<TerrainTypeData, byte>(terrainData.Length);            // terrainId is assigned by list order after sorting, 0 reserved for base
             byte nextId = 1;
             for (int i = 0; i < terrainData.Length; i++)
             {
@@ -177,7 +205,7 @@ namespace AI_Workshop03
 
         #region Cell Data
 
-        private void ApplyTerrainData(TerrainData terrain, byte terrainLayerId, bool isObstacle)
+        private void ApplyTerrainData(TerrainTypeData terrain, byte terrainLayerId, bool isObstacle)
         {
             _scratch.cells.Clear();
 
@@ -205,23 +233,24 @@ namespace AI_Workshop03
         }
 
 
-        private void GenerateBlobs(TerrainData terrain, List<int> outCells)
+
+        private void GenerateBlobs(TerrainTypeData terrain, List<int> outCells)
         {
             outCells.Clear();
 
             int desiredCells = Mathf.RoundToInt(terrain.CoveragePercent * _cellCount);
             if (desiredCells <= 0) return;
 
-            int avgSize = Mathf.Max(1, terrain.Blob.AvgSize);
+            int avgSize = Mathf.Max(1, terrain.Blob.AvgBlobSize);
             int blobCount = desiredCells / avgSize;
-            blobCount = Mathf.Clamp(blobCount, terrain.Blob.MinSeparateBlobs, terrain.Blob.MaxSeparateBlobs);
+            blobCount = Mathf.Clamp(blobCount, terrain.Blob.MinBlobCount, terrain.Blob.MaxBlobCount);
 
             for (int b = 0; b < blobCount; b++)
             {
-                if (!TryPickRandomValidCell(terrain, out int seed, 256))
+                if (!TryPickCell_ByFocusArea(terrain, terrain.Blob.PlacementArea, terrain.Blob.PlacementWeights, out int seed, 256))
                     break;
 
-                int size = avgSize + _rng.Next(-terrain.Blob.SizeJitter, terrain.Blob.SizeJitter + 1);
+                int size = avgSize + _rng.Next(-terrain.Blob.BlobSizeJitter, terrain.Blob.BlobSizeJitter + 1);
                 size = Mathf.Max(10, size);
 
                 _scratch.temp.Clear();
@@ -231,7 +260,7 @@ namespace AI_Workshop03
         }
 
 
-        private void GenerateLichtenberg(TerrainData terrain, byte dataLayerId, List<int> outCells)
+        private void GenerateLichtenberg(TerrainTypeData terrain, byte dataLayerId, List<int> outCells)
         {
 
             outCells.Clear();
@@ -245,9 +274,9 @@ namespace AI_Workshop03
 
             int perPath = Mathf.Max(1, terrain.Lichtenberg.CellsPerPath);
             int pathCount = desiredCells / perPath;
-            pathCount = Mathf.Clamp(pathCount, terrain.Lichtenberg.MinSeperatePaths, terrain.Lichtenberg.MaxSeparatePaths);
+            pathCount = Mathf.Clamp(pathCount, terrain.Lichtenberg.MinPathCount, terrain.Lichtenberg.MaxPathCount);
 
-            int maxSteps = Mathf.RoundToInt((_width + _height) * terrain.Lichtenberg.StepsScale);
+            int maxSteps = Mathf.RoundToInt((_width + _height) * terrain.Lichtenberg.StepBudgetScale);
 
 
             for (int r = 0; r < pathCount; r++)
@@ -255,18 +284,18 @@ namespace AI_Workshop03
                 int start;
                 int goal;
 
-                if (terrain.Lichtenberg.RequireOppositeEdgePair)
+                if (terrain.Lichtenberg.UseEdgePairPresets)
                 {
-                    if (!TryPickOppositeEdgePair(terrain, out int startIdx, out int goalIdx, 256)) break;
-                    start = startIdx;
-                    goal = goalIdx;
+                    if (!TryPickCell_EdgePairPreset(terrain, terrain.Lichtenberg.EdgePairMode, out start, out goal, 256)) 
+                        break;
                 }
                 else
                 {
-                    if (!TryPickRandomValidCell(terrain, out int startIdx, 256)) break;
-                    if (!TryPickRandomValidCell(terrain, out int goalIdx, 256)) break;
-                    start = startIdx;
-                    goal = goalIdx;
+                    if (!TryPickCell_ByFocusArea(terrain, terrain.Lichtenberg.OriginArea, terrain.Lichtenberg.OriginWeights, out start, 256)) 
+                        break;
+
+                    if (!TryPickCell_ByFocusArea(terrain, terrain.Lichtenberg.GrowthAimArea, terrain.Lichtenberg.GrowthAimWeights, out goal, 256)) 
+                        break;
                 }
 
 
@@ -290,7 +319,7 @@ namespace AI_Workshop03
 
         #region Update and Overwrite Cell Data
 
-        private void ApplyTerrain(TerrainData terrain, byte terrainLayerId, List<int> cells)
+        private void ApplyTerrain(TerrainTypeData terrain, byte terrainLayerId, List<int> cells)
         {
             for (int i = 0; i < cells.Count; i++)
             {
@@ -308,7 +337,7 @@ namespace AI_Workshop03
             }
         }
 
-        private void ApplyObstacles(TerrainData terrain, byte terrainLayerId, List<int> cells)
+        private void ApplyObstacles(TerrainTypeData terrain, byte terrainLayerId, List<int> cells)
         {
             for (int i = 0; i < cells.Count; i++)
             {
@@ -331,7 +360,7 @@ namespace AI_Workshop03
         #region Expansion Algorithms  - rng and modifier 
 
         private void ExpandRandomStatic(
-            TerrainData terrain,
+            TerrainTypeData terrain,
             List<int> outCells)
         {
             outCells.Clear();
@@ -339,34 +368,123 @@ namespace AI_Workshop03
             float coverage = Mathf.Clamp01(terrain.CoveragePercent);
             if (coverage <= 0) return;
 
+            EnsureGenBuffers();
+
+            ExpansionAreaFocus placement = terrain.Static.PlacementArea;
+            TerrainTypeData.AreaFocusWeights weights = terrain.Static.PlacementWeights;
+            int margin = ComputeInteriorMarginCells(in weights);
+
+            float clusterBias = Mathf.Clamp01(terrain.Static.ClusterBias);
+
+            ExpansionAreaFocus poolFilter =
+                (placement == ExpansionAreaFocus.Weighted) ? ExpansionAreaFocus.Anywhere : placement;
+
             _scratch.temp.Clear();
+            int poolMark = NextMarkId();
+
+
             for (int i = 0; i < _cellCount; i++)
             {
                 if (!CanUseCell(terrain, i)) continue;
+                if (!MatchesFocus(i, poolFilter, margin)) continue;
+
+                int pos = _scratch.temp.Count;
                 _scratch.temp.Add(i);
+
+                _scratch.used[i] = poolMark;
+                _scratch.poolPos[i] = pos; 
             }
 
             int eligible = _scratch.temp.Count;
             if (eligible == 0) return;
 
-            int target = Mathf.RoundToInt(coverage * eligible);
+            int targetTotal = Mathf.RoundToInt(coverage * _cellCount);
+            int target = Mathf.Min(targetTotal, eligible); 
             if (target <= 0) return;
-            if (target > eligible) target = eligible;
 
 
-            // Partial Fisher-Yates: pick 'target' unique cells     // Note to self; look more into Fisher-Yates and Partial Fisher-Yates later
+            // Selection picking eligible candidates
+
+            if (clusterBias <= 0f)
+            {
+
+                if (placement == ExpansionAreaFocus.Weighted)
+                {
+                    // for weighted search of viable cells 
+                    for (int k = 0; k < target; k++)
+                    {
+                        ExpansionAreaFocus pickFocus = RollWeightedFocus(in weights, _rng);
+
+                        int focusTries = Mathf.Clamp(_scratch.temp.Count / 8, 8, 64);
+                        if (!TryPickFromPool_ByFocus(pickFocus, margin, focusTries, out int pickedIdx))
+                            break;
+
+                        RemoveFromPool(pickedIdx, poolMark);
+                        outCells.Add(pickedIdx);
+                    }
+                    return;
+                }
+
+                // non-weighted uniform pick by Partial Fisher-Yates: pick 'target' unique cells     // Note to self; look more into Fisher-Yates and Partial Fisher-Yates later
+                for (int k = 0; k < target; k++)
+                {
+                    int swap = _rng.Next(k, eligible);
+                    (_scratch.temp[k], _scratch.temp[swap]) = (_scratch.temp[swap], _scratch.temp[k]);
+                    outCells.Add(_scratch.temp[k]);
+                }
+                return;
+            }
+
+
+            // should scale with map size
+            int loose = Mathf.Max(4, Mathf.RoundToInt(Mathf.Min(_width, _height) * 0.02f));
+            int tight = 2;
+            // higer bias should make the static expansion cluster more into groups 
+            int maxRadius = Mathf.Max(1, Mathf.RoundToInt(Mathf.Lerp(loose, tight, clusterBias)));
+
+            int nearTries = Mathf.Max(8, Mathf.RoundToInt(Mathf.Lerp(8f, 32f, clusterBias)));
             for (int k = 0; k < target; k++)
             {
-                int swap = _rng.Next(k, eligible);
-                (_scratch.temp[k], _scratch.temp[swap]) = (_scratch.temp[swap], _scratch.temp[k]);
-                outCells.Add(_scratch.temp[k]);
+                if (_scratch.temp.Count == 0) break;
+
+                ExpansionAreaFocus pickFocus =
+                    (placement == ExpansionAreaFocus.Weighted)
+                        ? RollWeightedFocus(in weights, _rng)
+                        : placement;
+
+                int pickedIdx = -1;
+
+                // tries cluster-near pick first inside enforced focus region
+                if (outCells.Count > 0 && _rng.NextDouble() < clusterBias)
+                {
+                    if (TryPickCell_NearExisting(outCells, poolMark, maxRadius, nearTries,
+                            out int near,
+                            requiredArea: pickFocus,
+                            interiorMargin: margin))
+                    {
+                        pickedIdx = near;
+                    }
+                }
+
+                // if clustering didn’t pick anything, pick from pool respecting focus
+                if (pickedIdx < 0)
+                {
+                    // the tries = how hard it will try to find a cell that matches focus area from available in pool
+                    int focusTries = Mathf.Clamp(_scratch.temp.Count / 8, 8, 64);
+
+                    if (!TryPickFromPool_ByFocus(pickFocus, margin, focusTries, out pickedIdx))
+                        break; // pool empty or something very wrong
+                }
+
+                RemoveFromPool(pickedIdx, poolMark);
+                outCells.Add(pickedIdx);
             }
 
         }
 
 
         private void ExpandRandomBlob(
-            TerrainData terrain,
+            TerrainTypeData terrain,
             int seedIndex,
             int maxCells,
             List<int> outCells)
@@ -385,7 +503,7 @@ namespace AI_Workshop03
             _scratch.queue[tail++] = seedIndex;
             outCells.Add(seedIndex);
 
-            float growChance = Mathf.Clamp01(terrain.Blob.ExpansionChance);
+            float growChance = Mathf.Clamp01(terrain.Blob.GrowChance);
             int smoothPasses = terrain.Blob.SmoothPasses;
             maxCells = Mathf.Max(1, maxCells);
 
@@ -438,7 +556,7 @@ namespace AI_Workshop03
 
 
         private void ExpandRandomLichtenberg(
-            TerrainData terrain,
+            TerrainTypeData terrain,
             byte terrainPaintId,
             int usedId,
             int startIndex,
@@ -457,9 +575,9 @@ namespace AI_Workshop03
 
             bool preferUnused = terrain.Lichtenberg.PreferUnusedCells;
             bool allowReuse = terrain.Lichtenberg.AllowReuseIfStuck;
-            float towardTargetBias = Mathf.Clamp01(terrain.Lichtenberg.GrowthTowardTargetBias);
-            float branchChance = Mathf.Clamp01(terrain.Lichtenberg.BranchChance);
-            int maxWalkers = Mathf.Clamp(terrain.Lichtenberg.MaxWalkers, 1, 64);
+            float towardTargetBias = Mathf.Clamp01(terrain.Lichtenberg.GoalGrowthBias);
+            float branchChance = Mathf.Clamp01(terrain.Lichtenberg.BranchSpawnChance);
+            int maxWalkers = Mathf.Clamp(terrain.Lichtenberg.MaxActiveWalkers, 1, 64);
             maxSteps = Mathf.Max(1, maxSteps);
 
             int walkerCount = 1;
@@ -541,11 +659,11 @@ namespace AI_Workshop03
 
                         // heat scoring to biase choise
                         int heat = _scratch.heat[cand];
-                        float repel = terrain.Lichtenberg.RepelStrength * heat;
+                        float repel = terrain.Lichtenberg.HeatRepelStrength * heat;
 
                         // penalize stepping on cells allready targeted 
-                        if (terrain.Lichtenberg.RepelFromExisting && usedByThisTerrainAlready)
-                            repel += terrain.Lichtenberg.ExistingPenalty;
+                        if (terrain.Lichtenberg.RepelPenaltyFromExisting && usedByThisTerrainAlready)
+                            repel += terrain.Lichtenberg.ExistingCellPenalty;
 
                         int candH = Math.Max(Math.Abs(targetX - cx), Math.Abs(targetY - cy));
 
@@ -576,7 +694,7 @@ namespace AI_Workshop03
                 _scratch.queue[walkerThisStep] = nextIndex;
 
                 // update heat after a walker moves
-                AddHeat(nextIndex, terrain.Lichtenberg.RepelRadius, terrain.Lichtenberg.HeatAdd, terrain.Lichtenberg.HeatFalloff);
+                AddHeat(nextIndex, terrain.Lichtenberg.HeatRepelRadius, terrain.Lichtenberg.HeatAdd, terrain.Lichtenberg.HeatFalloff);
 
                 if (_scratch.stamp[nextIndex] != stampId)
                 {
@@ -591,7 +709,7 @@ namespace AI_Workshop03
             }
         }
 
-        private void WidenOnce(TerrainData terrain, List<int> cells)
+        private void WidenOnce(TerrainTypeData terrain, List<int> cells)
         {
             EnsureGenBuffers();
             int stampId = NextMarkId();
@@ -626,7 +744,33 @@ namespace AI_Workshop03
         #endregion
 
 
-        #region Pickers
+
+        #region Cell Pickers
+
+        private bool CanUseCell(TerrainTypeData terrain, int idx)
+        {
+            // Hard-block overwrite policy
+            if (_blocked[idx])
+                return terrain.AllowOverwriteObstacle;  //  (obstacle overwrite)
+
+            // Terrain overwrite gating (painterId = layer; 0 = base)        
+            bool isBase = (_painterId[idx] == 0);
+
+            if (terrain.OnlyAffectBase)                 // can this only effect base terrain tile?      (terrain overwrite)
+                return isBase;
+
+            if (!terrain.AllowOverwriteTerrain)         // if terrain is not a base tile, may it overwrite it?     (terrain overwrite)
+                return isBase;
+
+            return true;
+        }
+
+        private bool CanPickCell(TerrainTypeData terrain, int idx)
+        {
+            if (terrain.ForceUnblockedSeed && _blocked[idx]) return false;
+            return CanUseCell(terrain, idx);
+        }
+
 
         private bool TryPickRandomUnBlocked(out int index, int tries, bool requireBase)
         {
@@ -645,7 +789,7 @@ namespace AI_Workshop03
 
         }
 
-        private bool TryPickRandomValidCell(TerrainData terrain, out int index, int tries)
+        private bool TryPickCell_Anywhere(TerrainTypeData terrain, out int index, int tries)
         {
             index = -1;
 
@@ -660,24 +804,72 @@ namespace AI_Workshop03
             return false;
         }
 
-        private bool TryPickRandomInteriorValidCell(TerrainData terrain, int margin, out int index, int tries)
+        private bool TryPickCell_NearExisting( List<int> chosen, int poolId, int radius, int tries, out int result,
+            ExpansionAreaFocus requiredArea = ExpansionAreaFocus.Anywhere, int interiorMargin = 0)
+        {
+
+            result = -1;
+
+            if (requiredArea == ExpansionAreaFocus.Weighted)
+            {
+#if UNITY_EDITOR
+                Debug.LogError("TryPickCell_NearExisting: focus must not be Weighted. Roll it first.");
+#endif
+                requiredArea = ExpansionAreaFocus.Anywhere;
+            }
+
+
+            for (int i = 0; i < tries; i++)
+            {
+                int anchor = chosen[_rng.Next(0, chosen.Count)];
+                IndexToXY(anchor, out int ax, out int ay);
+
+                var (dx, dy) = Neighbors8[_rng.Next(0, Neighbors8.Length)];
+
+                // bias towards small distances, cluster
+                int dist = 1 + (int)(System.Math.Pow(_rng.NextDouble(), 2.0) * radius);
+
+                int x = ax + dx * dist;
+                int y = ay + dy * dist;
+
+                if ((uint)x >= (uint)_width || (uint)y >= (uint)_height) continue;
+
+
+                int candIdx = CoordToIndex(x, y);
+                if (_scratch.used[candIdx] != poolId) continue;
+
+                // enforce focus region, if terrain uses that
+                if (!MatchesFocus(candIdx, requiredArea, interiorMargin)) continue;
+
+                result = candIdx;
+                return true;
+            }
+
+            return false;
+        }
+
+        private bool TryPickCell_Interior(TerrainTypeData terrain, in TerrainTypeData.AreaFocusWeights weights, out int index, int tries)
         {
             index = -1;
-            margin = Mathf.Clamp(margin, 0, Mathf.Min(_width, _height) / 2);
+            int margin = ComputeInteriorMarginCells(weights);
+
+            if (_width - 2 * margin <= 0 || _height - 2 * margin <= 0)
+                return false;
 
             for (int t = 0; t < tries; t++)
             {
                 int x = _rng.Next(margin, _width - margin);
                 int y = _rng.Next(margin, _height - margin);
-                int i = CoordToIndex(x, y);
-                if (!CanPickCell(terrain, i)) continue;
-                index = i;
+
+                int candIdx = CoordToIndex(x, y);
+                if (!CanPickCell(terrain, candIdx)) continue;
+                index = candIdx;
                 return true;
             }
             return false;
         }
 
-        private bool TryPickRandomEdgeValidCell(TerrainData terrain, out int index, int tries)
+        private bool TryPickCell_Edge(TerrainTypeData terrain, out int index, int tries)
         {
             index = -1;
 
@@ -689,9 +881,9 @@ namespace AI_Workshop03
 
                 switch (side)
                 {
-                    case 0: x = 0; y = _rng.Next(0, _height); break;  // left
-                    case 1: x = _width - 1; y = _rng.Next(0, _height); break;  // right
-                    case 2: x = _rng.Next(0, _width); y = 0; break;  // bottom
+                    case 0: x = 0; y = _rng.Next(0, _height); break;            // left
+                    case 1: x = _width - 1; y = _rng.Next(0, _height); break;   // right
+                    case 2: x = _rng.Next(0, _width); y = 0; break;             // bottom
                     default: x = _rng.Next(0, _width); y = _height - 1; break;  // top
                 }
 
@@ -703,74 +895,282 @@ namespace AI_Workshop03
             return false;
         }
 
-        private bool TryPickOppositeEdgePair(TerrainData terrain, out int start, out int goal, int tries)
+        private bool TryPickCell_EdgeOnSide(TerrainTypeData terrain, int side, out int index, int tries)
         {
-            start = -1;
-            goal = -1;
+            index = -1;
+            side = Mathf.Clamp(side, 0, 3);
 
             for (int t = 0; t < tries; t++)
             {
-                int side = _rng.Next(0, 4);
-
-                int sideX;
-                int sideY;
+                int x, y;
                 switch (side)
                 {
-                    case 0: sideX = 0; sideY = _rng.Next(0, _height); break;          // left
-                    case 1: sideX = _width - 1; sideY = _rng.Next(0, _height); break;          // right
-                    case 2: sideX = _rng.Next(0, _width); sideY = 0; break;          // bottom
-                    default: sideX = _rng.Next(0, _width); sideY = _height - 1; break;          // top
+                    case 0: x = 0; y = _rng.Next(0, _height); break;               // left
+                    case 1: x = _width - 1; y = _rng.Next(0, _height); break;      // right
+                    case 2: x = _rng.Next(0, _width); y = 0; break;                // bottom
+                    default: x = _rng.Next(0, _width); y = _height - 1; break;     // top
                 }
 
-                int sideCand = CoordToIndex(sideX, sideY);
-                if (!CanPickCell(terrain, sideCand)) continue;
-
-
-                int opositSide = side ^ 1;  // 0<->1, 2<->3
-
-                int goalSideX;
-                int goalSideY;
-                switch (opositSide)
-                {
-                    case 0: goalSideX = 0; goalSideY = _rng.Next(0, _height); break;
-                    case 1: goalSideX = _width - 1; goalSideY = _rng.Next(0, _height); break;
-                    case 2: goalSideX = _rng.Next(0, _width); goalSideY = 0; break;
-                    default: goalSideX = _rng.Next(0, _width); goalSideY = _height - 1; break;
-                }
-
-                int goalCand = CoordToIndex(goalSideX, goalSideY);
-                if (!CanPickCell(terrain, goalCand)) continue;
-
-                start = sideCand;
-                goal = goalCand;
+                int candIdx = CoordToIndex(x, y);
+                if (!CanPickCell(terrain, candIdx)) continue;
+                index = candIdx;
                 return true;
             }
 
             return false;
         }
 
-        private bool CanUseCell(TerrainData terrain, int idx)
+
+        #endregion
+
+
+        #region Cell Pickers - Advanced 
+
+        // maybe add in a version of this method where the startIdx or startSide can be choosen and not rng,
+        // move code and make this a a wrapper that feeds in a rng start value to the other method 
+        private bool TryPickCell_EdgePairPreset(TerrainTypeData terrain, LichtenbergEdgePairMode mode, out int startIdx, out int goalIdx, int tries)
         {
-            // Hard-block overwrite policy
-            if (_blocked[idx])
-                return terrain.AllowOverwriteObstacle;  //  (obstacle overwrite)
+            startIdx = -1;
+            goalIdx = -1;
 
-            // Terrain overwrite gating (painterId = layer; 0 = base)        
-            bool isBase = (_painterId[idx] == 0);
+            for (int t = 0; t < tries; t++)
+            {
+                int startSide = _rng.Next(0, 4);
 
-            if (terrain.OnlyAffectBase)                 // can this only effect base terrain tile?      (terrain overwrite)
-                return isBase;
+                if (!TryPickCell_EdgeOnSide(terrain, startSide, out startIdx, 32))
+                    continue;
 
-            if (!terrain.AllowOverwriteTerrain)         // if terrain is not a base tile, may it overwrite it?     (terrain overwrite)
-                return isBase;
+                int goalSide = PickGoalSideByMode(startSide, mode);
 
+                if (!TryPickCell_EdgeOnSide(terrain, goalSide, out goalIdx, 32))
+                    continue;
+
+                if (startIdx == goalIdx) continue; 
+
+                return true;
+            }
+
+            return false;
+        }
+       
+        private bool TryPickCell_ByFocusArea(
+            TerrainTypeData terrain, 
+            ExpansionAreaFocus focus, 
+            in TerrainTypeData.AreaFocusWeights weights, 
+            out int index, int tries)
+        {
+            index = -1;
+
+            int fallbackTries = Mathf.Max(8, tries / 2);    // protects against: tries/2 can become 0 wherepick loops would never run
+
+            switch (focus)
+            {
+                case ExpansionAreaFocus.Edge:
+                    return TryPickCell_Edge(terrain, out index, tries);
+
+                case ExpansionAreaFocus.Interior:
+                    {
+                        return TryPickCell_Interior(terrain, in weights, out index, tries);
+                    }
+
+                case ExpansionAreaFocus.Anywhere:
+                    return TryPickCell_Anywhere(terrain, out index, tries);
+
+                case ExpansionAreaFocus.Weighted:
+                    {
+                        // RollWeightedFocus can return Anywhere if weights are all zero/misconfigured as a sensible default.
+                        ExpansionAreaFocus rolled = RollWeightedFocus(in weights, _rng);
+
+                        switch (rolled)
+                        {
+                            case ExpansionAreaFocus.Edge:
+                            {
+                                // Rolled into EDGE range -> try EDGE first
+                                if (TryPickCell_Edge(terrain, out index, tries)) return true;
+
+                                // fallback choice, next best to originally wanted: Interior, then Anywhere
+                                if (TryPickCell_Interior(terrain, in weights, out index, fallbackTries)) return true;
+                                return TryPickCell_Anywhere(terrain, out index, fallbackTries);
+                            }
+
+                            case ExpansionAreaFocus.Interior:
+                            {
+                                // Rolled into INTERIOR range -> try INTERIOR first
+                                if (TryPickCell_Interior(terrain, in weights, out index, tries)) return true;
+
+                                // fallback choice, next best to originally wanted: Anywhere, then Edge
+                                if (TryPickCell_Anywhere(terrain, out index, fallbackTries)) return true;
+                                return TryPickCell_Edge(terrain, out index, fallbackTries);
+                            }
+
+                            case ExpansionAreaFocus.Anywhere:
+                            default:
+                            {
+                                // Rolled into ANYWHERE range -> try ANYWHERE first
+                                if (TryPickCell_Anywhere(terrain, out index, tries)) return true;
+
+                                // fallback choice, next best to originally wanted: Interior, then Edge 
+                                if (TryPickCell_Interior(terrain, in weights, out index, fallbackTries)) return true;
+                                return TryPickCell_Edge(terrain, out index, fallbackTries);
+                            }
+                        }
+                    }
+
+                default:
+                    return TryPickCell_Anywhere(terrain, out index, tries);
+            }
+        }
+
+
+
+        private bool TryPickFromPool_ByFocus(
+            ExpansionAreaFocus focusArea,   // expected: Edge/Interior/Anywhere   DO NOT call with ExpansionAreaFocus.Weighted
+            int interiorMargin,
+            int tries,
+            out int idx)
+        {
+
+            idx = -1;
+
+
+            if (focusArea == ExpansionAreaFocus.Weighted)
+            {
+#if UNITY_EDITOR
+                Debug.LogError("TryPickFromPool_ByFocus: focus must not be Weighted. Roll it first.");
+#endif            
+                focusArea = ExpansionAreaFocus.Anywhere;
+            }
+
+
+            int count = _scratch.temp.Count;
+            if (count == 0 ) return false;  
+
+            // pick anywhere fast path
+            if (focusArea == ExpansionAreaFocus.Anywhere)
+            {
+                idx = _scratch.temp[_rng.Next(0, count)];
+                return true;
+            }
+
+            // rejection sample from pool to find cells matching focus area
+            for( int i = 0; i < tries; i++ )
+            {
+                int candIdx = _scratch.temp[_rng.Next(0, count)];
+                if (!MatchesFocus(candIdx, focusArea, interiorMargin)) continue;
+                idx = candIdx;
+                return true;    
+            }
+
+            // fallback, give a randomly generated result back anyways 
+            idx = _scratch.temp[_rng.Next(0,count)];
             return true;
         }
 
-        private bool CanPickCell(TerrainData terrain, int idx)
+
+        #endregion
+
+
+        #region Cell-Pick Helpers
+
+
+        private bool IsEdgeCell(int idx)
         {
-            if (terrain.ForceUnblockedSeed && _blocked[idx]) return false;
-            return CanUseCell(terrain, idx);
+            IndexToXY(idx, out int x, out int y);
+            return x == 0 || y == 0 || x == _width - 1 || y == _height - 1;
+        }
+
+        private bool IsInteriorCell(int idx, int interiorMargin)
+        {
+            int m = Mathf.Clamp(interiorMargin, 0, Mathf.Min(_width, _height) / 2);
+
+            if (_width - 2 * m <= 0 || _height - 2 * m <= 0)
+                return false;
+
+            IndexToXY(idx, out int x, out int y);
+            return x >= m && x < _width - m && y >= m && y < _height - m;
+        }
+
+        private bool MatchesFocus(int idx, ExpansionAreaFocus focus, int interiorMargin)
+        {
+            switch (focus)
+            {
+                case ExpansionAreaFocus.Edge: return IsEdgeCell(idx);
+                case ExpansionAreaFocus.Interior: return IsInteriorCell(idx, interiorMargin);
+                case ExpansionAreaFocus.Anywhere:
+                default: return true;
+            }
+        }
+
+        private int PickGoalSideByMode(int startSide, LichtenbergEdgePairMode mode)
+        {
+            int opp = OppositeSide(startSide);
+
+            switch (mode)
+            {
+                case LichtenbergEdgePairMode.Any:
+                    return _rng.Next(0, 4);
+
+                case LichtenbergEdgePairMode.SameEdge:
+                    return startSide;
+
+                case LichtenbergEdgePairMode.AdjacentEdge:
+                    {
+                        // not same edge, not the opposite edge
+
+                        if (startSide < 2)      // For left/right (0/1), adjacent are bottom/top (2/3).
+                                return (_rng.NextDouble() < 0.5) ? 2 : 3;
+                            else                // For bottom/top (2/3), adjacent are left/right (0/1).
+                                return (_rng.NextDouble() < 0.5) ? 0 : 1;
+                    }
+
+                case LichtenbergEdgePairMode.OppositeEdgePair:
+                    return opp;
+
+                case LichtenbergEdgePairMode.NotOpposite:
+                default:
+                    {
+                        // anything except opposite: {same, adjacent left, adjacent right} = 3 choices
+                        int roll = _rng.Next(0, 3);
+                        if (roll == 0) return startSide;
+
+                        if (startSide < 2)
+                            return (roll == 1) ? 2 : 3;
+                        else
+                            return (roll == 1) ? 0 : 1; 
+                    }
+            }
+        }
+
+        private static ExpansionAreaFocus RollWeightedFocus(in AreaFocusWeights weights, System.Random rng)
+        {
+            float edgeWeight = Mathf.Max(0f, weights.EdgeWeight);
+            float interiorWeight = Mathf.Max(0f, weights.InteriorWeight);
+            float anywhereWeight = Mathf.Max(0f, weights.AnywhereWeight);
+
+            float total = edgeWeight + interiorWeight + anywhereWeight;
+            if (total <= 0f) return ExpansionAreaFocus.Anywhere;
+
+            double r = rng.NextDouble() * total;
+
+            if (r < edgeWeight) return ExpansionAreaFocus.Edge;
+            if (r < edgeWeight + interiorWeight) return ExpansionAreaFocus.Interior;
+            return ExpansionAreaFocus.Anywhere;
+        }
+
+
+        private void RemoveFromPool(int idx, int poolMark)
+        {
+            if (_scratch.used[idx] != poolMark) return;
+
+            int pos = _scratch.poolPos[idx];
+            int lastPos = _scratch.temp.Count - 1;
+            int lastIdx = _scratch.temp[lastPos];
+
+            _scratch.temp[pos] = lastIdx;
+            _scratch.poolPos[lastIdx] = pos;
+
+            _scratch.temp.RemoveAt(lastPos);
+            _scratch.used[idx] = 0; // not in pool
         }
 
         #endregion
@@ -865,18 +1265,26 @@ namespace AI_Workshop03
 
             if (_scratch.heat == null || _scratch.heat.Length != _cellCount)
                 _scratch.heat = new int[_cellCount];
+
+            if (_scratch.poolPos == null || _scratch.poolPos.Length != _cellCount)
+                _scratch.poolPos = new int[_cellCount];
         }
 
         private int NextMarkId()
         {
-            _scratch.stampId++;
-            if (_scratch.stampId == int.MaxValue)
+            int next = _scratch.stampId + 1;
+            if (next <= 0 ||next == int.MaxValue)
             {
                 Array.Clear(_scratch.stamp, 0, _scratch.stamp.Length);
                 Array.Clear(_scratch.used, 0, _scratch.used.Length);
+
                 _scratch.stampId = 1;
+                return 1;
             }
-            return _scratch.stampId;
+
+            // restart at 1 (0 means unmarked)
+            _scratch.stampId = next;
+            return next; 
         }
 
         private void AddHeat(int idx, int radius, int add, int falloff)
@@ -898,7 +1306,139 @@ namespace AI_Workshop03
                 }
         }
 
+        private int ComputeInteriorMarginCells()
+        {
+            // 5% of min dimension, at least 2 cells
+            return Mathf.Max(2, Mathf.RoundToInt(Mathf.Min(_width, _height) * 0.05f));
+        }
+
+        private int ComputeInteriorMarginCells(in TerrainTypeData.AreaFocusWeights weights)
+        {
+            float percent = Mathf.Clamp(weights.InteriorMarginPercent, 0f, 0.49f);
+            int minDim = Mathf.Min(_width, _height);
+
+            // ensures _rng.Next(low, high) has low < high.
+            int maxMargin = Mathf.Max(0, (minDim - 1) / 2);
+
+            int marginByPercent = Mathf.RoundToInt(minDim * percent);
+            int margin = Mathf.Max(Mathf.Max(0, weights.InteriorMinMargin), marginByPercent);
+
+            return Mathf.Clamp(margin, 0, maxMargin);
+        }
+
+
         #endregion
+
+
+
+        #region Debug Tools
+
+        private void DebugDumpFocusWeights(int seed, TerrainTypeData[] terrainData)
+        {
+            if (!Debug_DumpFocusWeights) return;
+
+            var stringBuilder = new StringBuilder(2048);
+            stringBuilder.AppendLine($"[MapGen Focus Weights] seed={seed} size={_width}x{_height} terrains={terrainData?.Length ?? 0}");
+
+            if (terrainData == null || terrainData.Length == 0)
+            {
+                stringBuilder.AppendLine("  (no terrain data)");
+                Debug.Log(stringBuilder.ToString());
+                return;
+            }
+
+            for (int i = 0; i < terrainData.Length; i++)
+            {
+                var t = terrainData[i];
+                if (t == null) continue;
+
+                stringBuilder.AppendLine($"- {t.name}  Mode={t.Mode}  Coverage={t.CoveragePercent:0.###}  Obstacle={t.IsObstacle}");
+
+                switch (t.Mode)
+                {
+                    case PlacementMode.Static:
+                        AppendFocus(stringBuilder, "Static.Placement", t.Static.PlacementArea, in t.Static.PlacementWeights);
+                        break;
+
+                    case PlacementMode.Blob:
+                        AppendFocus(stringBuilder, "Blob.Placement", t.Blob.PlacementArea, in t.Blob.PlacementWeights);
+                        break;
+
+                    case PlacementMode.Lichtenberg:
+                        AppendFocus(stringBuilder, "Lichtenberg.Origin", t.Lichtenberg.OriginArea, in t.Lichtenberg.OriginWeights);
+                        AppendFocus(stringBuilder, "Lichtenberg.GrowthAim", t.Lichtenberg.GrowthAimArea, in t.Lichtenberg.GrowthAimWeights);
+
+                        if (Debug_DumpFocusWeightsVerbose)
+                        {
+                            stringBuilder.AppendLine($"    EdgePresets: Use={t.Lichtenberg.UseEdgePairPresets} Mode={t.Lichtenberg.EdgePairMode}");
+                            stringBuilder.AppendLine($"    Paths: [{t.Lichtenberg.MinPathCount}..{t.Lichtenberg.MaxPathCount}] Cells/Path={t.Lichtenberg.CellsPerPath}");
+                        }
+                        break;
+                }
+            }
+
+            Debug.Log(stringBuilder.ToString());
+        }
+
+        
+        private void AppendFocus(
+            StringBuilder stringBuilder,
+            string label,
+            ExpansionAreaFocus focus,
+            in TerrainTypeData.AreaFocusWeights weights)
+        {
+
+            // Interior margin is only relevant for Interior or Weighted (since Weighted may choose Interior)
+            int marginCells = ComputeInteriorMarginCells(in weights);
+
+            int innerW = Mathf.Max(0, _width - 2 * marginCells);
+            int innerH = Mathf.Max(0, _height - 2 * marginCells);
+            int interiorCellCount = innerW * innerH;
+
+            stringBuilder.AppendLine($"    {label}: focus={focus}");
+
+            if (focus == ExpansionAreaFocus.Weighted)
+            {
+                float edgeWeights = Mathf.Max(0f, weights.EdgeWeight);
+                float interiorWeights = Mathf.Max(0f, weights.InteriorWeight);
+                float anywhereWeight = Mathf.Max(0f, weights.AnywhereWeight);
+                float total = edgeWeights + interiorWeights + anywhereWeight;
+
+                if (total <= 0f)
+                {
+                    stringBuilder.AppendLine("      weights: (all <= 0) -> effective: Anywhere=100%");
+                }
+                else
+                {
+                    float pE = edgeWeights / total;
+                    float pI = interiorWeights / total;
+                    float pA = anywhereWeight / total;
+
+                    stringBuilder.AppendLine(
+                        $"      raw: Edge={edgeWeights:0.###} Interior={interiorWeights:0.###} Anywhere={anywhereWeight:0.###}  (sum={total:0.###})");
+                    stringBuilder.AppendLine(
+                        $"      normalized: Edge={pE:P1} Interior={pI:P1} Anywhere={pA:P1}");
+                }
+
+                stringBuilder.AppendLine(
+                    $"      interior margin: {marginCells} cells  -> interior rect {innerW}x{innerH} ({interiorCellCount} cells)");
+            }
+            else if (focus == ExpansionAreaFocus.Interior)
+            {
+                stringBuilder.AppendLine(
+                    $"      interior margin: {marginCells} cells  -> interior rect {innerW}x{innerH} ({interiorCellCount} cells)");
+            }
+            else if (Debug_DumpFocusWeightsVerbose)
+            {
+                // Useful when tuning: still show what the weights *are*, even if not used in non-weighted modes.
+                stringBuilder.AppendLine(
+                    $"      (weights ignored unless focus=Weighted) raw Edge={weights.EdgeWeight:0.###} Interior={weights.InteriorWeight:0.###} Anywhere={weights.AnywhereWeight:0.###}");
+            }
+        }
+
+
+        #endregion
+
 
     }
 

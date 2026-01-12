@@ -2,7 +2,7 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 
 using PlacementMode = AI_Workshop02.PlacementMode;
-using TerrainData = AI_Workshop02.TerrainData;
+using TerrainData = AI_Workshop02.TerrainTypeData;
 using TerrainID = AI_Workshop02.TerrainID;
 
 

@@ -9,14 +9,14 @@ MonoBehaviour:
   m_GameObject: {fileID: 0}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 8e87f334da9cd5f4aad1499f234d37e1, type: 3}
+  m_Script: {fileID: 11500000, guid: 472b1421239d1bf4987317d939769f14, type: 3}
   m_Name: TR_Road2
   m_EditorClassIdentifier: Assembly-CSharp::AI_Workshop02.TerrainRule
-  DisplayName: Road2
+  DisplayName: Road
   VisualPrefab: {fileID: 0}
   Color:
     serializedVersion: 2
-    rgba: 3364012249
+    rgba: 4283351025
   Cost: 6
   TerrainID: 0
   IsObstacle: 0
@@ -24,33 +24,62 @@ MonoBehaviour:
   Mode: 2
   CoveragePercent: 0.08
   AllowOverwriteObstacle: 0
-  OnlyAffectBase: 1
-  AllowOverwriteTerrain: 0
-  Order: 1
+  OnlyAffectBase: 0
+  AllowOverwriteTerrain: 1
+  Order: 40
   Static:
-    ScatterBias: 0.55
+    PlacementArea: 0
+    PlacementWeights:
+      EdgeWeight: 0.15
+      InteriorWeight: 0.6
+      AnywhereWeight: 0.25
+      InteriorMarginPercent: 0.05
+      InteriorMinMargin: 2
+    ClusterBias: 0.55
   Blob:
-    AvgSize: 120
-    SizeJitter: 60
-    MinSeparateBlobs: 6
-    MaxSeparateBlobs: 30
-    ExpansionChance: 0.55
+    PlacementArea: 0
+    PlacementWeights:
+      EdgeWeight: 0.15
+      InteriorWeight: 0.6
+      AnywhereWeight: 0.25
+      InteriorMarginPercent: 0.05
+      InteriorMinMargin: 2
+    AvgBlobSize: 120
+    BlobSizeJitter: 60
+    MinBlobCount: 6
+    MaxBlobCount: 30
+    GrowChance: 0.55
     SmoothPasses: 1
   Lichtenberg:
-    MinSeperatePaths: 4
-    MaxSeparatePaths: 16
-    CellsPerPath: 40
-    StepsScale: 3
-    MaxWalkers: 3
-    GrowthTowardTargetBias: 0.7
-    BranchChance: 0.05
-    WidenPasses: 0
-    PreferUnusedCells: 1
+    OriginArea: 0
+    GrowthAimArea: 0
+    OriginWeights:
+      EdgeWeight: 0.15
+      InteriorWeight: 0.6
+      AnywhereWeight: 0.25
+      InteriorMarginPercent: 0.05
+      InteriorMinMargin: 2
+    GrowthAimWeights:
+      EdgeWeight: 0.15
+      InteriorWeight: 0.6
+      AnywhereWeight: 0.25
+      InteriorMarginPercent: 0.05
+      InteriorMinMargin: 2
+    UseEdgePairPresets: 1
+    EdgePairMode: 3
+    MinPathCount: 2
+    MaxPathCount: 4
+    CellsPerPath: 120
+    StepBudgetScale: 3
+    MaxActiveWalkers: 18
+    BranchSpawnChance: 0.3
+    GoalGrowthBias: 0.75
+    WidenPasses: 1
+    PreferUnusedCells: 0
     AllowReuseIfStuck: 1
-    RequireOppositeEdgePair: 1
-    RepelStrength: 3
-    RepelRadius: 4
-    HeatAdd: 5
+    HeatRepelStrength: 0.8
+    HeatRepelRadius: 1
+    HeatAdd: 4
     HeatFalloff: 2
-    RepelFromExisting: 1
-    ExistingPenalty: 8
+    RepelPenaltyFromExisting: 0
+    ExistingCellPenalty: 8

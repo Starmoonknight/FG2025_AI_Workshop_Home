@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 
-using TerrainData = AI_Workshop02.TerrainData;
+using TerrainTypeData = AI_Workshop02.TerrainTypeData;
 using TerrainID = AI_Workshop02.TerrainID;
 
 
@@ -14,18 +14,13 @@ namespace AI_Workshop03
     {
 
         [Header("Game Camera Settings")]
-        [SerializeField]
-        private Camera _mainCamera;
-        [SerializeField]
-        private float _cameraPadding = 1f;
+        [SerializeField] private Camera _mainCamera;
+        [SerializeField] private float _cameraPadding = 1f;
 
         [Header("Board Settings")]
-        [SerializeField]
-        private Renderer _boardRenderer;
-        [SerializeField, Min(1)]
-        private int _width = 10;
-        [SerializeField, Min(1)]
-        private int _height = 10;
+        [SerializeField] private Renderer _boardRenderer;
+        [SerializeField, Min(1)] private int _width = 10;
+        [SerializeField, Min(1)] private int _height = 10;
 
         [Header("Texture Mapping")]
         [SerializeField] private bool _flipTextureX = true;
@@ -34,21 +29,16 @@ namespace AI_Workshop03
         private Color32[] _texturePixels;
 
         [Header("Map Generation Settings")]
-        [SerializeField]
-        private int _seed = 0;
-        [SerializeField] 
-        private int _lastGeneratedSeed = 0;
-        [SerializeField, Range(0f, 1f)]
-        private float _minUnblockedPercent = 0.5f;
-        [SerializeField, Range(0f, 1f)]
-        private float _minReachablePercent = 0.75f;
-        [SerializeField]
-        private int _maxGenerateAttempts = 50;
+        [SerializeField] private int _seed = 0;
+        [SerializeField]  private int _lastGeneratedSeed = 0;
+        [SerializeField, Range(0f, 1f)] private float _minUnblockedPercent = 0.5f;
+        [SerializeField, Range(0f, 1f)] private float _minReachablePercent = 0.75f;
+        [SerializeField]  private int _maxGenerateAttempts = 50;
 
         private System.Random _goalRng;
 
         [Header("Generation Data")]
-        [SerializeField] private TerrainData[] _terrainData;
+        [SerializeField] private TerrainTypeData[] _terrainData;
 
         private readonly MapDataGenerator _generator = new MapDataGenerator();
 
@@ -57,20 +47,20 @@ namespace AI_Workshop03
         [SerializeField] private Transform _obstacleRoot;
         private GameObject[] _obstacleInstances;
 
-        [Header("Debug Seed HUD")]
+        [Header("Debug: Seed HUD")]
         [SerializeField] private bool _showSeedHud = true;
         [SerializeField] private TMPro.TextMeshProUGUI _seedHudLabel;
         [SerializeField] private string _seedHudPrefix = "Seed: ";
 
-        [Header("Debug A* Costs Overlay")]
-        [SerializeField]
-        private bool _showDebugCosts = true;
-        [SerializeField]
-        private TMPro.TextMeshPro _costLabelPrefab;
-        [SerializeField]
-        private Transform _costLabelRoot;
-        [SerializeField]
-        private float _costLabelOffsetY = 0.05f;
+        [Header("Debug: Generation")]
+        [SerializeField] private bool _dumpFocusWeights = true; 
+        [SerializeField] private bool _dumpFocusWeightsVerbose = false;
+
+        [Header("Debug: A* Costs Overlay")]
+        [SerializeField] private bool _showDebugCosts = true;
+        [SerializeField] private TMPro.TextMeshPro _costLabelPrefab;
+        [SerializeField] private Transform _costLabelRoot;
+        [SerializeField] private float _costLabelOffsetY = 0.05f;
 
         private TMPro.TextMeshPro[] _costLabels;
         private readonly List<int> _costLabelsTouched = new();
@@ -153,6 +143,148 @@ namespace AI_Workshop03
             _textureDirty = false;
             RefreshTexture();
         }
+
+
+        #region Public API
+
+
+        public void GenerateNewGameBoard()
+        {
+            ValidateGridSize();
+
+            _cellCount = _width * _height;
+
+            _blocked = new bool[_cellCount];
+            _terrainKind = new byte[_cellCount];
+            _terrainCost = new int[_cellCount];
+            _baseCellColors = new Color32[_cellCount];
+            _cellColors = new Color32[_cellCount];
+            _painterId = new byte[_cellCount];
+
+            int baseSeed = (_seed != 0) ? _seed : Environment.TickCount;
+            int genSeed = baseSeed;
+            int goalSeed = baseSeed ^ unchecked((int)0x9E3779B9);       // salted seed
+
+            _lastGeneratedSeed = baseSeed;
+            Debug.Log($"[MapManager] Generated map with seed={baseSeed} (genSeed={genSeed})");
+            UpdateSeedHud();
+
+            _goalRng = new System.Random(goalSeed);
+
+            // Initialize all cells as walkable with default terrain cost
+            for (int i = 0; i < _cellCount; i++)
+            {
+                _blocked[i] = false;
+                _terrainCost[i] = 10;
+                _baseCellColors[i] = _walkableColor;
+
+                _painterId[i] = 0;
+                _terrainKind[i] = (byte)TerrainID.Land;
+            }
+
+
+            // Setup the Debug
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            _generator.Debug_DumpFocusWeights = _dumpFocusWeights;
+            _generator.Debug_DumpFocusWeightsVerbose = _dumpFocusWeightsVerbose;
+#else
+            _generator.Debug_DumpFocusWeights = false;
+            _generator.Debug_DumpFocusWeightsVerbose = false;
+#endif
+
+
+            // Call the BoardGenerator to set up the game 
+            _generator.Generate(
+                _width,
+                _height,
+                _blocked,               // if true blocks all movement over this tile
+                _terrainKind,           // what kind of terrain type this tile is, id: 0 = basic/land   (Land/Liquid/etc)
+                _terrainCost,           // cost modifier of moving over this tile
+                _baseCellColors,        // base colors before any external modifiers
+                _painterId,             // what TerrainData affect this, layer id: 0 = base 
+                _walkableColor,         // base color before any terrain modifier
+                10,                     // base cost before any terrain modifier
+                genSeed,                // seed (0 means random)
+                _terrainData,           // TerrainData[]
+                _maxGenerateAttempts,   // limit for map generator
+                _minUnblockedPercent,   // ratio of allowd un-blocked to blocked tiles 
+                _minReachablePercent,   // how much walkable ground is required to be connected when BuildReachableFrom
+                BuildReachableFrom      // Func<int,int> reachable count from start
+            );
+
+
+
+            RecomputeMinTerrainCost();  // after terrain costs are set compute minimum traversal cost possible on this map
+
+            _gridTexture = new Texture2D(_width, _height, TextureFormat.RGBA32, false);
+            _gridTexture.filterMode = FilterMode.Point;
+            _gridTexture.wrapMode = TextureWrapMode.Clamp;
+
+            RebuildCellColorsFromBase();
+            FlushTexture();
+
+            // Scale plane to match grid world size (X = width, Z = height)
+            _boardRenderer.transform.localScale = new Vector3(_width / UNITY_PLANE_SIZE, 1f, _height / UNITY_PLANE_SIZE);
+            // Center = world coords can run 0,0
+            _boardRenderer.transform.position = new Vector3(_width * 0.5f, 0f, _height * 0.5f);   // Center the quad, works in XZ plane
+            _boardRenderer.transform.rotation = Quaternion.identity;
+
+
+            var mat = _boardRenderer.material;
+
+            // set mainTexture (should cover multiple shaders)
+            mat.mainTexture = _gridTexture;
+
+            // set whichever property the shader actually uses
+            if (mat.HasProperty("_BaseMap")) mat.SetTexture("_BaseMap", _gridTexture);   // URP
+            if (mat.HasProperty("_MainTex")) mat.SetTexture("_MainTex", _gridTexture);   // Built-in
+
+            if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", Color.white);
+            if (mat.HasProperty("_Color")) mat.SetColor("_Color", Color.white);
+
+
+
+
+            // Temp placeholder location!
+            RebuildObstacleCubes();
+
+
+
+
+            FitCameraOrthoTopDown();
+        }
+
+
+        // Public version with exception on out of bounds
+        public int CoordToIndex(int x, int y)
+        {
+            if (!TryCoordToIndex(x, y, out int index))
+                throw new ArgumentOutOfRangeException();
+            return index;
+        }
+
+        // Safe version with bounds checking, use when not sure coordinates are valid
+        public bool TryCoordToIndex(int x, int y, out int index)
+        {
+            if ((uint)x >= (uint)_width || (uint)y >= (uint)_height) { index = -1; return false; }
+            index = x + y * _width;
+            return true;
+        }
+
+        public void IndexToXY(int index, out int x, out int y)
+        {
+            x = index % _width;
+            y = index / _width;
+        }
+
+        public Vector3 IndexToWorldCenterXZ(int index, float yOffset = 0f)
+        {
+            IndexToXY(index, out int x, out int z);
+            return new Vector3(x + 0.5f, yOffset, z + 0.5f);
+        }
+
+
+        #endregion
 
 
 
@@ -306,6 +438,7 @@ namespace AI_Workshop03
         }
 
         #endregion
+
 
 
         #region Cell Data Setter
@@ -464,136 +597,9 @@ namespace AI_Workshop03
         #endregion
 
 
-        #region Other Utilities
 
-        public void GenerateNewGameBoard()
-        {
-            ValidateGridSize();
-
-            _cellCount = _width * _height;
-
-            _blocked = new bool[_cellCount];
-            _terrainKind = new byte[_cellCount];
-            _terrainCost = new int[_cellCount];
-            _baseCellColors = new Color32[_cellCount];
-            _cellColors = new Color32[_cellCount];
-            _painterId = new byte[_cellCount];
-
-            int baseSeed = (_seed != 0) ? _seed : Environment.TickCount;
-            int genSeed = baseSeed;
-            int goalSeed = baseSeed ^ unchecked((int)0x9E3779B9);       // salted seed
-
-            _lastGeneratedSeed = baseSeed;
-            Debug.Log($"[MapManager] Generated map with seed={baseSeed} (genSeed={genSeed})");
-            UpdateSeedHud();
-
-            _goalRng = new System.Random(goalSeed);
-
-            // Initialize all cells as walkable with default terrain cost
-            for (int i = 0; i < _cellCount; i++)
-            {
-                _blocked[i] = false;
-                _terrainCost[i] = 10;
-                _baseCellColors[i] = _walkableColor;
-
-                _painterId[i] = 0;
-                _terrainKind[i] = (byte)TerrainID.Land;
-            }
-
-            // Call the BoardGenerator to set up the game 
-            _generator.Generate(
-                _width,
-                _height,
-                _blocked,               // if true blocks all movement over this tile
-                _terrainKind,           // what kind of terrain type this tile is, id: 0 = basic/land   (Land/Liquid/etc)
-                _terrainCost,           // cost modifier of moving over this tile
-                _baseCellColors,        // base colors before any external modifiers
-                _painterId,             // what TerrainData affect this, layer id: 0 = base 
-                _walkableColor,         // base color before any terrain modifier
-                10,                     // base cost before any terrain modifier
-                genSeed,                // seed (0 means random)
-                _terrainData,           // TerrainData[]
-                _maxGenerateAttempts,   // limit for map generator
-                _minUnblockedPercent,   // ratio of allowd un-blocked to blocked tiles 
-                _minReachablePercent,   // how much walkable ground is required to be connected when BuildReachableFrom
-                BuildReachableFrom      // Func<int,int> reachable count from start
-            );
-
-
-
-
-
-            RecomputeMinTerrainCost();  // after terrain costs are set compute minimum traversal cost possible on this map
-
-            _gridTexture = new Texture2D(_width, _height, TextureFormat.RGBA32, false);
-            _gridTexture.filterMode = FilterMode.Point;
-            _gridTexture.wrapMode = TextureWrapMode.Clamp;
-
-            RebuildCellColorsFromBase();
-            FlushTexture();
-
-            // Scale plane to match grid world size (X = width, Z = height)
-            _boardRenderer.transform.localScale = new Vector3(_width / UNITY_PLANE_SIZE, 1f, _height / UNITY_PLANE_SIZE);
-            // Center = world coords can run 0,0
-            _boardRenderer.transform.position = new Vector3(_width * 0.5f, 0f, _height * 0.5f);   // Center the quad, works in XZ plane
-            _boardRenderer.transform.rotation = Quaternion.identity;
-
-
-            var mat = _boardRenderer.material;
-
-            // set mainTexture (should cover multiple shaders)
-            mat.mainTexture = _gridTexture;
-
-            // set whichever property the shader actually uses
-            if (mat.HasProperty("_BaseMap")) mat.SetTexture("_BaseMap", _gridTexture);   // URP
-            if (mat.HasProperty("_MainTex")) mat.SetTexture("_MainTex", _gridTexture);   // Built-in
-
-            if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", Color.white);
-            if (mat.HasProperty("_Color")) mat.SetColor("_Color", Color.white);
-
-
-
-
-            // Temp placeholder location!
-            RebuildObstacleCubes();
-
-
-            FitCameraOrthoTopDown();
-        }
-
-        // Public version with exception on out of bounds
-        public int CoordToIndex(int x, int y)
-        {
-            if (!TryCoordToIndex(x, y, out int index))
-                throw new ArgumentOutOfRangeException();
-            return index;
-        }
-
-        // Safe version with bounds checking, use when not sure coordinates are valid
-        public bool TryCoordToIndex(int x, int y, out int index)
-        {
-            if ((uint)x >= (uint)_width || (uint)y >= (uint)_height) { index = -1; return false; }
-            index = x + y * _width;
-            return true;
-        }
-
-        public void IndexToXY(int index, out int x, out int y)
-        {
-            x = index % _width;
-            y = index / _width;
-        }
-
-        public Vector3 IndexToWorldCenterXZ(int index, float yOffset = 0f)
-        {
-            IndexToXY(index, out int x, out int z);
-            return new Vector3(x + 0.5f, yOffset, z + 0.5f);
-        }
-
-
-        #endregion
-
-
-
+        #region Internal Helpers
+        
         private void RecomputeMinTerrainCost()
         {
             int minCost = int.MaxValue;
@@ -611,7 +617,6 @@ namespace AI_Workshop03
 
             _minTerrainCost = minCost;
         }
-
 
 
         private void EnsureReachBuffers()
@@ -803,6 +808,12 @@ namespace AI_Workshop03
 
             _mainCamera.orthographicSize = Mathf.Max(sizeToFitHeight, sizeToFitWidth) + _cameraPadding;
         }
+
+
+
+        #endregion
+
+
 
 
 
