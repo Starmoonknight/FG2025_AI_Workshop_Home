@@ -5,6 +5,8 @@ using UnityEngine;
 
 using AreaFocusWeights = AI_Workshop03.TerrainTypeData.AreaFocusWeights;
 
+
+
 #if UNITY_EDITOR
 using UnityEditor;
 #endif
@@ -281,7 +283,7 @@ namespace AI_Workshop03
 
                 if (terrain.Lichtenberg.UseEdgePairPresets)
                 {
-                    if (!TryPickCell_EdgePairPreset(terrain, terrain.Lichtenberg.EdgePairMode, out start, out goal, 256)) 
+                    if (!TryPickCell_EdgePairPreset(terrain, terrain.Lichtenberg.OriginWeights, terrain.Lichtenberg.GrowthAimWeights, terrain.Lichtenberg.EdgePairMode, out start, out goal, 256)) 
                         break;
                 }
                 else
@@ -454,7 +456,7 @@ namespace AI_Workshop03
                 {
                     if (TryPickCell_NearExisting(outCells, poolMark, maxRadius, nearTries,
                             out int near,
-                            requiredArea: pickFocus,
+                            focusArea: pickFocus,
                             interiorMargin: margin))
                     {
                         pickedIdx = near;
@@ -799,18 +801,173 @@ namespace AI_Workshop03
             return false;
         }
 
-        private bool TryPickCell_NearExisting( List<int> chosen, int poolId, int radius, int tries, out int result,
-            ExpansionAreaFocus requiredArea = ExpansionAreaFocus.Anywhere, int interiorMargin = 0)
+        // chooses from absolut map edge-boarder, the outermost ring of cells, only 1 cell thick
+        private bool TryPickCell_EdgeLine(TerrainTypeData terrain, out int index, int tries)
+        {
+            index = -1;
+
+            for (int t = 0; t < tries; t++)
+            {
+                int side = _rng.Next(0, 4);
+                if (TryPickCell_EdgeLine_Once(terrain, side, out index))
+                    return true;
+            }
+
+            return false;
+        }
+
+        // chooses from absolut map edge-boarder, the outermost ring of cells, only 1 cell thick
+        private bool TryPickCell_EdgeLineOnSide(TerrainTypeData terrain, int side, out int index, int tries)
+        {
+            index = -1;
+            side = ((side % 4) + 4) % 4;
+
+            for (int t = 0; t < tries; t++)
+            {
+                if (TryPickCell_EdgeLine_Once(terrain, side, out index))
+                    return true;
+            }
+
+            return false;
+        }
+
+        // chooses from absolut map edge-boarder, the outermost ring of cells, only 1 cell thick
+        private bool TryPickCell_EdgeLine_Once(TerrainTypeData terrain, int side, out int index)
+        {
+            index = -1;
+
+            int x, y;
+            switch (side)
+            {
+                case 0:  x = 0;                     y = _rng.Next(0, _height); break;       // left
+                case 1:  x = _width - 1;            y = _rng.Next(0, _height); break;       // right
+                case 2:  x = _rng.Next(0, _width);  y = 0;           break;                 // bottom
+                default: x = _rng.Next(0, _width);  y = _height - 1; break;                 // top
+            }
+
+            int candIdx = CoordToIndex(x, y);
+            if (!CanPickCell(terrain, candIdx)) return false;
+
+            index = candIdx;
+            return true;
+        }
+
+
+
+
+        // Look into 
+        private bool TryPickCell_CenterArea(TerrainTypeData terrain, out int index, int tries)
+        {
+            index = -1;
+            int centerX = _width / 2;
+            int centerY = _height / 2;
+            int areaWidth = Mathf.Max(1, _width / 4);
+            int areaHeight = Mathf.Max(1, _height / 4);
+            int minX = centerX - areaWidth / 2;
+            int maxX = centerX + areaWidth / 2;
+            int minY = centerY - areaHeight / 2;
+            int maxY = centerY + areaHeight / 2;
+            for (int t = 0; t < tries; t++)
+            {
+                int x = _rng.Next(minX, maxX);
+                int y = _rng.Next(minY, maxY);
+                if (x < 0 || x >= _width || y < 0 || y >= _height) continue;
+
+                int candIdx = CoordToIndex(x, y);
+                if (!CanPickCell(terrain, candIdx)) continue;
+
+                index = candIdx;
+                return true;
+            }
+            return false;
+        }
+
+
+        #endregion
+
+
+        #region Cell Pickers - Advanced 
+       
+        private bool TryPickCell_ByFocusArea(
+            TerrainTypeData terrain, 
+            ExpansionAreaFocus focusArea, 
+            in TerrainTypeData.AreaFocusWeights weights, 
+            out int index, int tries)
+        {
+            index = -1;
+
+            int fallbackTries = Mathf.Max(8, tries / 2);    // protects against: tries/2 can become 0 wherepick loops would never run
+
+            switch (focusArea)
+            {
+                case ExpansionAreaFocus.Edge:
+                    return TryPickCell_EdgeBandArea(terrain, in weights, out index, tries);
+
+                case ExpansionAreaFocus.Interior:
+                    {
+                        return TryPickCell_Interior(terrain, in weights, out index, tries);
+                    }
+
+                case ExpansionAreaFocus.Anywhere:
+                    return TryPickCell_Anywhere(terrain, out index, tries);
+
+                case ExpansionAreaFocus.Weighted:
+                    {
+                        // RollWeightedFocus can return Anywhere if weights are all zero/misconfigured as a sensible default.
+                        ExpansionAreaFocus rolled = RollWeightedFocus(in weights, _rng);
+
+                        switch (rolled)
+                        {
+                            case ExpansionAreaFocus.Edge:
+                            {
+                                // Rolled into EDGE range -> try EDGE first
+                                if (TryPickCell_EdgeBandArea(terrain, in weights, out index, tries)) return true;
+
+                                // fallback choice, next best to originally wanted: Interior, then Anywhere
+                                if (TryPickCell_Interior(terrain, in weights, out index, fallbackTries)) return true;
+                                return TryPickCell_Anywhere(terrain, out index, fallbackTries);
+                            }
+
+                            case ExpansionAreaFocus.Interior:
+                            {
+                                // Rolled into INTERIOR range -> try INTERIOR first
+                                if (TryPickCell_Interior(terrain, in weights, out index, tries)) return true;
+
+                                // fallback choice, next best to originally wanted: Anywhere, then Edge
+                                if (TryPickCell_Anywhere(terrain, out index, fallbackTries)) return true;
+                                return TryPickCell_EdgeBandArea(terrain, in weights, out index, fallbackTries);
+                            }
+
+                            case ExpansionAreaFocus.Anywhere:
+                            default:
+                            {
+                                // Rolled into ANYWHERE range -> try ANYWHERE first
+                                if (TryPickCell_Anywhere(terrain, out index, tries)) return true;
+
+                                // fallback choice, next best to originally wanted: Interior, then Edge 
+                                if (TryPickCell_Interior(terrain, in weights, out index, fallbackTries)) return true;
+                                return TryPickCell_EdgeBandArea(terrain, in weights, out index, fallbackTries);
+                            }
+                        }
+                    }
+
+                default:
+                    return TryPickCell_Anywhere(terrain, out index, tries);
+            }
+        }
+
+        private bool TryPickCell_NearExisting(List<int> chosen, int poolId, int radius, int tries, out int result,
+            ExpansionAreaFocus focusArea = ExpansionAreaFocus.Anywhere, int interiorMargin = 0)
         {
 
             result = -1;
 
-            if (requiredArea == ExpansionAreaFocus.Weighted)
+            if (focusArea == ExpansionAreaFocus.Weighted)
             {
 #if UNITY_EDITOR
                 Debug.LogError("TryPickCell_NearExisting: focus must not be Weighted. Roll it first.");
 #endif
-                requiredArea = ExpansionAreaFocus.Anywhere;
+                focusArea = ExpansionAreaFocus.Anywhere;
             }
 
 
@@ -834,7 +991,7 @@ namespace AI_Workshop03
                 if (_scratch.used[candIdx] != poolId) continue;
 
                 // enforce focus region, if terrain uses that
-                if (!MatchesFocus(candIdx, requiredArea, interiorMargin)) continue;
+                if (!MatchesFocus(candIdx, focusArea, interiorMargin)) continue;
 
                 result = candIdx;
                 return true;
@@ -843,13 +1000,69 @@ namespace AI_Workshop03
             return false;
         }
 
+        private bool TryPickCell_EdgeBandArea(TerrainTypeData terrain, in AreaFocusWeights weights, out int index, int tries)
+        {
+            index = -1;
+
+            for (int t = 0; t < tries; t++)
+            {
+                int side = _rng.Next(0, 4);
+                if (TryPickCell_EdgeBandArea_Once(terrain, in weights, side, out index))
+                    return true;
+            }
+
+            return false;
+        }
+
+        private bool TryPickCell_EdgeBandAreaOnSide(TerrainTypeData terrain, in AreaFocusWeights weights, int side, out int index, int tries)
+        {
+            index = -1;
+            side = ((side % 4) + 4) % 4;
+
+            for (int t = 0; t < tries; t++)
+            {
+                if (TryPickCell_EdgeBandArea_Once(terrain, in weights, side, out index))
+                    return true;
+            }
+
+            return false;
+        }
+
+        private bool TryPickCell_EdgeBandArea_Once(TerrainTypeData terrain, in AreaFocusWeights weights, int side, out int index)
+        {
+            index = -1;
+
+            int band = ComputeEdgeBandCells(in weights);
+
+            // silent fallback to absolute map boarder-edge if no valid edge band on tiny maps
+            if (band <= 0)
+                return TryPickCell_EdgeLine_Once(terrain, side, out index);
+
+            int x, y;
+
+            switch (side)
+            {
+                case 0: x  = _rng.Next(0, band);                y = _rng.Next(0, _height);  break;              // left
+                case 1: x  = _rng.Next(_width - band, _width);  y = _rng.Next(0, _height);  break;              // right
+                case 2: x  = _rng.Next(0, _width);              y = _rng.Next(0, band);     break;              // bottom
+                default: x = _rng.Next(0, _width);              y = _rng.Next(_height - band, _height); break;  // top
+            }
+
+            int candIdx = CoordToIndex(x, y);
+            if (!CanPickCell(terrain, candIdx)) return false;
+
+            index = candIdx;
+            return true;
+        }
+
         private bool TryPickCell_Interior(TerrainTypeData terrain, in TerrainTypeData.AreaFocusWeights weights, out int index, int tries)
         {
             index = -1;
-            int margin = ComputeInteriorMarginCells(weights);
+            int margin = ComputeInteriorMarginCells(in weights);
 
+            // silent fallback to anywhere if margin too big for map
             if (_width - 2 * margin <= 0 || _height - 2 * margin <= 0)
-                return false;
+                return TryPickCell_Anywhere(terrain, out index, tries);
 
             for (int t = 0; t < tries; t++)
             {
@@ -864,66 +1077,11 @@ namespace AI_Workshop03
             return false;
         }
 
-        private bool TryPickCell_Edge(TerrainTypeData terrain, out int index, int tries)
-        {
-            index = -1;
-
-            for (int t = 0; t < tries; t++)
-            {
-                int side = _rng.Next(0, 4);
-                int x;
-                int y;
-
-                switch (side)
-                {
-                    case 0: x = 0; y = _rng.Next(0, _height); break;            // left
-                    case 1: x = _width - 1; y = _rng.Next(0, _height); break;   // right
-                    case 2: x = _rng.Next(0, _width); y = 0; break;             // bottom
-                    default: x = _rng.Next(0, _width); y = _height - 1; break;  // top
-                }
-
-                int i = CoordToIndex(x, y);
-                if (!CanPickCell(terrain, i)) continue;
-                index = i;
-                return true;
-            }
-            return false;
-        }
-
-        private bool TryPickCell_EdgeOnSide(TerrainTypeData terrain, int side, out int index, int tries)
-        {
-            index = -1;
-            side = Mathf.Clamp(side, 0, 3);
-
-            for (int t = 0; t < tries; t++)
-            {
-                int x, y;
-                switch (side)
-                {
-                    case 0: x = 0; y = _rng.Next(0, _height); break;               // left
-                    case 1: x = _width - 1; y = _rng.Next(0, _height); break;      // right
-                    case 2: x = _rng.Next(0, _width); y = 0; break;                // bottom
-                    default: x = _rng.Next(0, _width); y = _height - 1; break;     // top
-                }
-
-                int candIdx = CoordToIndex(x, y);
-                if (!CanPickCell(terrain, candIdx)) continue;
-                index = candIdx;
-                return true;
-            }
-
-            return false;
-        }
-
-
-        #endregion
-
-
-        #region Cell Pickers - Advanced 
 
         // maybe add in a version of this method where the startIdx or startSide can be choosen and not rng,
-        // move code and make this a a wrapper that feeds in a rng start value to the other method 
-        private bool TryPickCell_EdgePairPreset(TerrainTypeData terrain, LichtenbergEdgePairMode mode, out int startIdx, out int goalIdx, int tries)
+        // move code and make this a a wrapper that feeds in a rng start value to the other method? 
+        private bool TryPickCell_EdgePairPreset(TerrainTypeData terrain, in TerrainTypeData.AreaFocusWeights startWeights, in TerrainTypeData.AreaFocusWeights goalWeights, LichtenbergEdgePairMode mode, 
+            out int startIdx, out int goalIdx, int tries)
         {
             startIdx = -1;
             goalIdx = -1;
@@ -932,12 +1090,12 @@ namespace AI_Workshop03
             {
                 int startSide = _rng.Next(0, 4);
 
-                if (!TryPickCell_EdgeOnSide(terrain, startSide, out startIdx, 32))
+                if (!TryPickCell_EdgeBandAreaOnSide(terrain, in startWeights, startSide, out startIdx, 32))
                     continue;
 
                 int goalSide = PickGoalSideByMode(startSide, mode);
 
-                if (!TryPickCell_EdgeOnSide(terrain, goalSide, out goalIdx, 32))
+                if (!TryPickCell_EdgeBandAreaOnSide(terrain, in goalWeights, goalSide, out goalIdx, 32))
                     continue;
 
                 if (startIdx == goalIdx) continue; 
@@ -946,74 +1104,6 @@ namespace AI_Workshop03
             }
 
             return false;
-        }
-       
-        private bool TryPickCell_ByFocusArea(
-            TerrainTypeData terrain, 
-            ExpansionAreaFocus focus, 
-            in TerrainTypeData.AreaFocusWeights weights, 
-            out int index, int tries)
-        {
-            index = -1;
-
-            int fallbackTries = Mathf.Max(8, tries / 2);    // protects against: tries/2 can become 0 wherepick loops would never run
-
-            switch (focus)
-            {
-                case ExpansionAreaFocus.Edge:
-                    return TryPickCell_Edge(terrain, out index, tries);
-
-                case ExpansionAreaFocus.Interior:
-                    {
-                        return TryPickCell_Interior(terrain, in weights, out index, tries);
-                    }
-
-                case ExpansionAreaFocus.Anywhere:
-                    return TryPickCell_Anywhere(terrain, out index, tries);
-
-                case ExpansionAreaFocus.Weighted:
-                    {
-                        // RollWeightedFocus can return Anywhere if weights are all zero/misconfigured as a sensible default.
-                        ExpansionAreaFocus rolled = RollWeightedFocus(in weights, _rng);
-
-                        switch (rolled)
-                        {
-                            case ExpansionAreaFocus.Edge:
-                            {
-                                // Rolled into EDGE range -> try EDGE first
-                                if (TryPickCell_Edge(terrain, out index, tries)) return true;
-
-                                // fallback choice, next best to originally wanted: Interior, then Anywhere
-                                if (TryPickCell_Interior(terrain, in weights, out index, fallbackTries)) return true;
-                                return TryPickCell_Anywhere(terrain, out index, fallbackTries);
-                            }
-
-                            case ExpansionAreaFocus.Interior:
-                            {
-                                // Rolled into INTERIOR range -> try INTERIOR first
-                                if (TryPickCell_Interior(terrain, in weights, out index, tries)) return true;
-
-                                // fallback choice, next best to originally wanted: Anywhere, then Edge
-                                if (TryPickCell_Anywhere(terrain, out index, fallbackTries)) return true;
-                                return TryPickCell_Edge(terrain, out index, fallbackTries);
-                            }
-
-                            case ExpansionAreaFocus.Anywhere:
-                            default:
-                            {
-                                // Rolled into ANYWHERE range -> try ANYWHERE first
-                                if (TryPickCell_Anywhere(terrain, out index, tries)) return true;
-
-                                // fallback choice, next best to originally wanted: Interior, then Edge 
-                                if (TryPickCell_Interior(terrain, in weights, out index, fallbackTries)) return true;
-                                return TryPickCell_Edge(terrain, out index, fallbackTries);
-                            }
-                        }
-                    }
-
-                default:
-                    return TryPickCell_Anywhere(terrain, out index, tries);
-            }
         }
 
 
@@ -1070,6 +1160,7 @@ namespace AI_Workshop03
 
         #region Cell-Pick Helpers
 
+        private bool IsValidCell(int index) => (uint)index < (uint)_cellCount;
 
         private bool IsEdgeCell(int idx)
         {
@@ -1216,8 +1307,6 @@ namespace AI_Workshop03
 
         #region Internal Helpers, Coordinates and Stamp data 
 
-        private bool IsValidCell(int index) => (uint)index < (uint)_cellCount;
-
         private int CoordToIndex(int x, int y) => x + y * _width;
 
         private bool TryCoordToIndex(int x, int y, out int index)
@@ -1322,6 +1411,15 @@ namespace AI_Workshop03
             int margin = Mathf.Max(Mathf.Max(0, weights.InteriorMinMargin), marginByPercent);
 
             return Mathf.Clamp(margin, 0, maxMargin);
+        }
+
+        private int ComputeEdgeBandCells(in TerrainTypeData.AreaFocusWeights weights)
+        {
+            int minDim = Mathf.Min(_width, _height);
+            int maxBand = Mathf.Max(0, (minDim - 1) / 2);
+
+            int band = ComputeInteriorMarginCells(in weights);
+            return Mathf.Clamp(band, 0, maxBand);
         }
 
 

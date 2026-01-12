@@ -463,8 +463,8 @@ MonoBehaviour:
   _mainCamera: {fileID: 781279594}
   _cameraPadding: 1
   _quadRenderer: {fileID: 77573380}
-  _width: 50
-  _height: 50
+  _width: 80
+  _height: 80
   _seed: 0
   _minUnblockedPercent: 0.5
   _minReachablePercent: 0.75

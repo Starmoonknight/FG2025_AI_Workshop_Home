@@ -13,28 +13,20 @@ MonoBehaviour:
   m_Name: R_Road
   m_EditorClassIdentifier: Assembly-CSharp::AI_Workshop02.TerrainRule
   DisplayName: New Rule
-  VisualPrefab: {fileID: 0}
   Color:
     serializedVersion: 2
-    rgba: 4294967295
-  Cost: 10
+    rgba: 4284473838
+  Cost: 6
   TerrainID: 0
   IsObstacle: 0
   ForceUnblockedSeed: 0
-  Mode: 0
+  Mode: 2
   CoveragePercent: 0.1
   AllowOverwriteObstacle: 0
   OnlyAffectBase: 1
   AllowOverwriteTerrain: 0
   Order: 1
   Blob:
-    PlacementArea: 0
-    PlacementWeights:
-      EdgeWeight: 0.15
-      InteriorWeight: 0.6
-      AnywhereWeight: 0.25
-      InteriorMarginPercent: 0.05
-      InteriorMinMargin: 2
     AvgBlobSize: 120
     BlobSizeJitter: 60
     MinBlobCount: 6
@@ -42,35 +34,20 @@ MonoBehaviour:
     GrowChance: 0.55
     SmoothPasses: 1
   Lichtenberg:
-    OriginArea: 0
-    GrowthAimArea: 0
-    OriginWeights:
-      EdgeWeight: 0.15
-      InteriorWeight: 0.6
-      AnywhereWeight: 0.25
-      InteriorMarginPercent: 0.05
-      InteriorMinMargin: 2
-    GrowthAimWeights:
-      EdgeWeight: 0.15
-      InteriorWeight: 0.6
-      AnywhereWeight: 0.25
-      InteriorMarginPercent: 0.05
-      InteriorMinMargin: 2
     RequireOppositeEdgePair: 1
-    EdgePairMode: 3
-    MinPathCount: 4
-    MaxPathCount: 16
-    CellsPerPath: 180
-    StepBudgetScale: 1.8
-    MaxActiveWalkers: 14
-    BranchSpawnChance: 0.18
-    GoalGrowthBias: 0.72
+    MinPathCount: 1
+    MaxPathCount: 4
+    CellsPerPath: 30
+    StepBudgetScale: 1
+    MaxActiveWalkers: 5
+    BranchSpawnChance: 0.06
+    GoalGrowthBias: 0.75
     WidenPasses: 0
     PreferUnusedCells: 1
     AllowReuseIfStuck: 1
-    HeatRepelStrength: 2
-    HeatRepelRadius: 1
-    HeatAdd: 5
+    HeatRepelStrength: 8
+    HeatRepelRadius: 5
+    HeatAdd: 4
     HeatFalloff: 2
     RepelPenaltyFromExisting: 1
     ExistingCellPenalty: 8

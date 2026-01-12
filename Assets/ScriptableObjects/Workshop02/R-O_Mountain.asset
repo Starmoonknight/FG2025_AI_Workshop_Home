@@ -12,29 +12,21 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: fec5726048f25cc478becae38d0b264e, type: 3}
   m_Name: R-O_Mountain
   m_EditorClassIdentifier: Assembly-CSharp::AI_Workshop02.TerrainRule
-  DisplayName: New Rule
-  VisualPrefab: {fileID: 0}
+  DisplayName: Mountain
   Color:
     serializedVersion: 2
-    rgba: 4294967295
+    rgba: 4282598226
   Cost: 10
   TerrainID: 0
-  IsObstacle: 0
+  IsObstacle: 1
   ForceUnblockedSeed: 0
-  Mode: 0
+  Mode: 2
   CoveragePercent: 0.1
   AllowOverwriteObstacle: 0
   OnlyAffectBase: 1
   AllowOverwriteTerrain: 0
   Order: 1
   Blob:
-    PlacementArea: 0
-    PlacementWeights:
-      EdgeWeight: 0.15
-      InteriorWeight: 0.6
-      AnywhereWeight: 0.25
-      InteriorMarginPercent: 0.05
-      InteriorMinMargin: 2
     AvgBlobSize: 120
     BlobSizeJitter: 60
     MinBlobCount: 6
@@ -42,30 +34,15 @@ MonoBehaviour:
     GrowChance: 0.55
     SmoothPasses: 1
   Lichtenberg:
-    OriginArea: 0
-    GrowthAimArea: 0
-    OriginWeights:
-      EdgeWeight: 0.15
-      InteriorWeight: 0.6
-      AnywhereWeight: 0.25
-      InteriorMarginPercent: 0.05
-      InteriorMinMargin: 2
-    GrowthAimWeights:
-      EdgeWeight: 0.15
-      InteriorWeight: 0.6
-      AnywhereWeight: 0.25
-      InteriorMarginPercent: 0.05
-      InteriorMinMargin: 2
     RequireOppositeEdgePair: 1
-    EdgePairMode: 3
     MinPathCount: 4
-    MaxPathCount: 16
-    CellsPerPath: 180
-    StepBudgetScale: 1.8
+    MaxPathCount: 8
+    CellsPerPath: 50
+    StepBudgetScale: 1
     MaxActiveWalkers: 14
-    BranchSpawnChance: 0.18
-    GoalGrowthBias: 0.72
-    WidenPasses: 0
+    BranchSpawnChance: 0.1
+    GoalGrowthBias: 0.6
+    WidenPasses: 2
     PreferUnusedCells: 1
     AllowReuseIfStuck: 1
     HeatRepelStrength: 2
