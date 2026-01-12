@@ -1,15 +1,15 @@
 using UnityEngine;
 
 
-namespace AI_Workshop02
+namespace AI_Workshop03
 {
 
     public enum PlacementMode { Static, Blob, Lichtenberg }
 
     public enum ExpansionAreaFocus { Anywhere, Interior, Edge, Weighted }
 
-    public enum LichtenbergEdgePairMode 
-    { 
+    public enum LichtenbergEdgePairMode
+    {
         Any,                // full random placement
         SameEdge,           // both endpoints on the same edge
         AdjacentEdge,       // endpoint edge must be adjacent (no opposite, no same)
@@ -18,17 +18,19 @@ namespace AI_Workshop02
     }
 
 
-    public enum TerrainID { 
+    public enum TerrainID
+    {
         Land            = 0,    // (0 = base) Normal ground without any modifiers 
-        Subterarrian    = 1,   
-        Liquid          = 2,         
-        Air             = 3,            
+        Subterarrian    = 1,
+        Liquid          = 2,
+        Air             = 3,
     }
 
 
-    [CreateAssetMenu(menuName = "Board/Terrain Data")]
+    // Version2 of TerrainRule with more advanced placement options
+    [CreateAssetMenu(menuName = "Board/Terrain Type Data (Workshop03)")]
     public sealed class TerrainTypeData : ScriptableObject
-    { 
+    {
 
         //[Header("Identity")]
         public string DisplayName = "New Rule";
@@ -40,22 +42,28 @@ namespace AI_Workshop02
         [Tooltip("Color painted into the board base colors.")]
         public Color32 Color = new Color32(255, 255, 255, 255);
 
-        [Tooltip("Terrain movement cost (ignored for obstacles in the current BoardGenerator.ApplyObstacles).")]
+        [Tooltip(
+            "Movement cost written into the board's terrainCost[] for painted WALKABLE cells.\n\n" +
+            "Note: When IsObstacle is true, BoardGenerator.ApplyObstacles() sets cost to 0 regardless of this value."
+        )]
         [Min(0)] public int Cost = 10;
 
 
 
         //[Header("Classification")]
         [Tooltip("NOTE: only Land is implemented right now")]
-        public TerrainID TerrainID = TerrainID.Land; 
+        public TerrainID TerrainID = TerrainID.Land;
 
-        [Tooltip("If true: this rule places obstacles (sets walkable=false). If false: paints walkable terrain.")]
+        [Tooltip("If true: this rule places obstacles (sets blocked=true). If false: paints walkable terrain.")]
         public bool IsObstacle = false;
 
 
 
         //[Header("Seeding")]
-        [Tooltip("When picking initial seed/start/goal cells, require the chosen cells to be unblocked.")]
+        [Tooltip(
+            "When picking initial seed / start / goal cells, require the chosen cells to be unblocked.\n\n" +
+            "Useful so roads/blobs never start inside obstacles."
+        )]
         public bool ForceUnblockedSeed = false;
 
 
@@ -69,16 +77,30 @@ namespace AI_Workshop02
 
 
         //[Header("Overwrite Rules")]
-        [Tooltip("If true: the generated cells may place on blocked cells (obstacles). If false: blocked cells are forbidden from being overwritten.")]
+        [Tooltip(
+            "If true: this rule may paint on top of blocked cells.\n\n" +
+            "- For walkable terrain: also clears blocked=false on those painted cells.\n" +
+            "- For obstacles: allows placing obstacles on top of existing obstacles."
+            )]
         public bool AllowOverwriteObstacle = false;
 
-        [Tooltip("If true: can only paint on base tiles (Terrain Order Layer: 0).")]
+        [Tooltip(
+            "If true: only paint cells that are still \"base\" (painterId == 0).\n\n" +
+            "This is evaluated before AllowOverwriteTerrain. If enabled, it prevents the layer from overwriting other terrain layers."
+            )]
         public bool OnlyAffectBase = true;
 
-        [Tooltip("If true: can overwrite other terrain types (overwriten by OnlyAffectBase).")]
+        [Tooltip(
+            "If true: can overwrite other walkable terrain layers types.\n\n" +
+            "Ignored when OnlyAffectBase is true.")]
         public bool AllowOverwriteTerrain = false;
 
-        [Tooltip("Optional ordering: lower first, higher later.")]
+        [Tooltip(
+            "Sort order used by BoardGenerator:\n" +
+            "- Lower Order runs earlier\n" +
+            "- Higher Order runs later\n\n" +
+            "BoardGenerator also always applies IsObstacle rules first, then non-obstacles (each group still sorted by Order)."
+            )]
         [Min(1)] public int Order = 1;
 
 
@@ -87,7 +109,7 @@ namespace AI_Workshop02
         [Header("Static Params")]
         public StaticParams Static = new StaticParams
         {
-            PlacementArea = ExpansionAreaFocus.Anywhere,
+            PlacementArea    = ExpansionAreaFocus.Anywhere,
             PlacementWeights = AreaFocusWeights.Legacy,
 
             ClusterBias = 0.55f
@@ -96,47 +118,47 @@ namespace AI_Workshop02
         [Header("Blob Params")]
         public BlobParams Blob = new BlobParams
         {
-            PlacementArea = ExpansionAreaFocus.Anywhere,
+            PlacementArea    = ExpansionAreaFocus.Anywhere,
             PlacementWeights = AreaFocusWeights.Legacy,
 
-            AvgBlobSize = 120,
-            BlobSizeJitter = 60,
-            MinBlobCount = 6,
-            MaxBlobCount = 30,
-            GrowChance = 0.55f,
-            SmoothPasses = 1
+            AvgBlobSize     = 120,
+            BlobSizeJitter  = 60,
+            MinBlobCount    = 6,
+            MaxBlobCount    = 30,
+            GrowChance      = 0.55f,
+            SmoothPasses    = 1
         };
 
         [Header("Lichtenberg Params")]
         public LichtenbergParams Lichtenberg = new LichtenbergParams
         {
-            OriginArea = ExpansionAreaFocus.Anywhere,
+            OriginArea    = ExpansionAreaFocus.Anywhere,
             GrowthAimArea = ExpansionAreaFocus.Anywhere,
 
-            OriginWeights = AreaFocusWeights.Legacy,
+            OriginWeights    = AreaFocusWeights.Legacy,
             GrowthAimWeights = AreaFocusWeights.Legacy,
-            
+
             UseEdgePairPresets = true,
-            EdgePairMode = LichtenbergEdgePairMode.OppositeEdgePair,
-            
-            MinPathCount = 4,
-            MaxPathCount = 16,
-            CellsPerPath = 180,
-            StepBudgetScale = 1.8f,
+            EdgePairMode       = LichtenbergEdgePairMode.OppositeEdgePair,
+
+            MinPathCount     = 4,
+            MaxPathCount     = 16,
+            CellsPerPath     = 180,
+            StepBudgetScale  = 1.8f,
             MaxActiveWalkers = 14,
-            
+
             BranchSpawnChance = 0.18f,
-            GoalGrowthBias = 0.72f,
-            WidenPasses = 0,
-            
+            GoalGrowthBias    = 0.72f,
+            WidenPasses       = 0,
+
             PreferUnusedCells = true,
             AllowReuseIfStuck = true,
-           
+
             HeatRepelStrength = 2.0f,
-            HeatRepelRadius = 1,
-            HeatAdd = 5,
-            HeatFalloff = 2,
-            
+            HeatRepelRadius   = 1,
+            HeatAdd           = 5,
+            HeatFalloff       = 2,
+
             RepelPenaltyFromExisting = true,
             ExistingCellPenalty = 8
         };
@@ -184,32 +206,35 @@ namespace AI_Workshop02
 
             public static AreaFocusWeights Legacy => new AreaFocusWeights
             {
-                EdgeWeight = 0.15f,
-                InteriorWeight = 0.60f,
-                AnywhereWeight = 0.25f,
+                EdgeWeight      = 0.15f,
+                InteriorWeight  = 0.60f,
+                AnywhereWeight  = 0.25f,
                 InteriorMarginPercent = 0.05f,
                 InteriorMinMargin = 2
             };
         }
 
 
-        [System.Serializable] public struct StaticParams 
+        [System.Serializable]
+        public struct StaticParams
         {
             public ExpansionAreaFocus PlacementArea;
 
             public AreaFocusWeights PlacementWeights;
 
-            [Range(0f, 1f)] public float ClusterBias;   
+            [Range(0f, 1f)] public float ClusterBias;
         }
 
-        [System.Serializable] public struct BlobParams 
+        [System.Serializable]
+        public struct BlobParams
         {
             public ExpansionAreaFocus PlacementArea;
 
             public AreaFocusWeights PlacementWeights;
 
             [Tooltip(
-                "Base target size for each blob (before jitter). Also used to estimate how many blobs to try:\n" +
+                "Base target size for each blob (before jitter).\n\n" +
+                "Also used to estimate how many blobs to try:\n" +
                 "blobCount = desiredCells / AvgSize, then clamped by Min/Max Blob Count.\n\n" +
                 "Bigger AvgSize -> fewer, larger blobs.\n" +
                 "Smaller AvgSize -> more, smaller blobs.\n\n" +
@@ -255,7 +280,8 @@ namespace AI_Workshop02
             [Range(0, 8)] public int SmoothPasses;
         }
 
-        [System.Serializable] public struct LichtenbergParams 
+        [System.Serializable]
+        public struct LichtenbergParams
         {
             public ExpansionAreaFocus OriginArea;
             public ExpansionAreaFocus GrowthAimArea;
@@ -274,7 +300,7 @@ namespace AI_Workshop02
                 "- SameEdge: both endpoints on the same edge.\n- AdjacentEdge: endpoints on adjacent edges " +
                 "(never same, never opposite).\n- OppositeEdgePair: endpoints on opposite edges (left<->right or bottom<->top).\n" +
                 "- NotOpposite: any pair except opposite (good default for \"\"along edges\"\" without forcing a full cross-map line).")]
-            public LichtenbergEdgePairMode EdgePairMode; 
+            public LichtenbergEdgePairMode EdgePairMode;
 
             [Tooltip("Minimum number of independent Lichtenberg paths (roads) to generate for this terrain layer. " +
                 "Actual count is estimated from CoveragePercent and CellsPerPath, then clamped to this range.")]
@@ -284,8 +310,8 @@ namespace AI_Workshop02
                 "Actual count is estimated from CoveragePercent and CellsPerPath, then clamped to this range.")]
             [Min(0)] public int MaxPathCount;
 
-            [Tooltip("Used ONLY to estimate pathCount = desiredCells / CellsPerPath. " +
-                "This does NOT cap how many cells one path can paint; StepsScale, branching, heat, and widen passes do.")]
+            [Tooltip("Used ONLY to estimate pathCount = desiredCells / CellsPerPath.\n\n" +
+                "This does NOT cap how many cells one path can paint; StepBudgetScale, branching, heat and widen passes do.")]
             [Min(1)] public int CellsPerPath;
 
             [Tooltip("Per-path move budget: maxSteps = (width + height) * StepsScale. " +
@@ -311,10 +337,13 @@ namespace AI_Workshop02
 
             [Tooltip("When picking the next step, try to avoid cells already used by earlier paths in THIS same Lichtenberg run " +
                 "(and any cells already painted with this terrain layer). Helps prevent paths clumping/crossing.")]
-            public bool PreferUnusedCells;                  
+            public bool PreferUnusedCells;
 
-            [Tooltip("Only used when PreferUnusedCells is enabled. If the path cannot find any unused neighbor, " +
-                "allow it to step onto used cells as a fallback. If disabled, the path ends early when stuck.")]
+            [Tooltip(
+                "Only used when PreferUnusedCells is enabled.\n\n" +
+                "If the path cannot find any unused neighbor, allow it to step onto used cells as a fallback.\n" +
+                "If disabled, the path ends early when stuck."
+                )]
             public bool AllowReuseIfStuck;
 
             [Tooltip("Multiplier for heat penalty when scoring candidate steps: repel = RepelStrength * heat[candidate]. " +
@@ -339,7 +368,7 @@ namespace AI_Workshop02
 
             [Tooltip("Extra penalty applied when RepelFromExisting is enabled and the candidate cell " +
                 "has already been painted by this terrain layer in earlier paths for this run.")]
-            [Min(0)] public int ExistingCellPenalty;    
+            [Min(0)] public int ExistingCellPenalty;
         }
 
 
@@ -365,5 +394,6 @@ namespace AI_Workshop02
 
 
     }
-}
 
+
+}

@@ -1,10 +1,10 @@
 using UnityEditor;
 using UnityEngine;
 
-using TD = AI_Workshop02.TerrainTypeData;
+using TD = AI_Workshop03.TerrainTypeData;
 
 
-namespace AI_Workshop02.Editor
+namespace AI_Workshop03.Editor
 {
 
     [CustomEditor(typeof(TD))]

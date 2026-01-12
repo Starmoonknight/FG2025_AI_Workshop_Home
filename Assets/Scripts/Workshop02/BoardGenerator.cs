@@ -55,7 +55,7 @@ namespace AI_Workshop02
             Color32 baseWalkableColor,
             int baseWalkableCost,
             int seed,
-            TerrainTypeData[] terrainData,
+            TerrainRule[] terrainData,
             int maxGenerateAttempts,
             float minUnblockedPercent,
             float minReachablePercent,
@@ -83,14 +83,14 @@ namespace AI_Workshop02
 
             _rng = new System.Random(seed);
 
-            terrainData ??= Array.Empty<TerrainTypeData>();
+            terrainData ??= Array.Empty<TerrainRule>();
 
 
             // --- Organize all terrains in use  ---
             Array.Sort(terrainData, (a, b) => (a?.Order ?? 0).CompareTo(b?.Order ?? 0));
                 
         
-            var terrainDataId = new Dictionary<TerrainTypeData, byte>(terrainData.Length);            // terrainId is assigned by list order after sorting, 0 reserved for base
+            var terrainDataId = new Dictionary<TerrainRule, byte>(terrainData.Length);            // terrainId is assigned by list order after sorting, 0 reserved for base
             byte nextId = 1;
             for (int i = 0; i < terrainData.Length; i++)
             {
@@ -172,7 +172,7 @@ namespace AI_Workshop02
 
         #region Cell Data
 
-        private void ApplyTerrainData(TerrainTypeData terrain, byte terrainLayerId, bool isObstacle)
+        private void ApplyTerrainData(TerrainRule terrain, byte terrainLayerId, bool isObstacle)
         {
             _scratch.cells.Clear();
 
@@ -200,7 +200,7 @@ namespace AI_Workshop02
         }
 
         
-        private void GenerateBlobs(TerrainTypeData terrain, List<int> outCells)
+        private void GenerateBlobs(TerrainRule terrain, List<int> outCells)
         {
             outCells.Clear();
 
@@ -226,7 +226,7 @@ namespace AI_Workshop02
         }
 
         
-        private void GenerateLichtenberg(TerrainTypeData terrain, byte dataLayerId, List<int> outCells)
+        private void GenerateLichtenberg(TerrainRule terrain, byte dataLayerId, List<int> outCells)
         {
             
             outCells.Clear();
@@ -250,7 +250,7 @@ namespace AI_Workshop02
                 int start;
                 int goal;
 
-                if ( terrain.Lichtenberg.UseEdgePairPresets)
+                if ( terrain.Lichtenberg.RequireOppositeEdgePair)
                 {
                     if (!TryPickOppositeEdgePair(terrain, out int startIdx, out int goalIdx, 256)) break;
                     start = startIdx;
@@ -285,7 +285,7 @@ namespace AI_Workshop02
 
         #region Update and Overwrite Cell Data
 
-        private void ApplyTerrain(TerrainTypeData terrain, byte terrainLayerId, List<int> cells)
+        private void ApplyTerrain(TerrainRule terrain, byte terrainLayerId, List<int> cells)
         {
             for (int i = 0; i < cells.Count; i++)
             {
@@ -303,7 +303,7 @@ namespace AI_Workshop02
             }
         }
                         
-        private void ApplyObstacles(TerrainTypeData terrain, byte terrainLayerId, List<int> cells)
+        private void ApplyObstacles(TerrainRule terrain, byte terrainLayerId, List<int> cells)
         {
             for (int i = 0; i < cells.Count; i++)
             {
@@ -326,7 +326,7 @@ namespace AI_Workshop02
         #region Expansion Algorithms  - rng and modifier 
 
         private void ExpandRandomStatic(
-            TerrainTypeData terrain, 
+            TerrainRule terrain, 
             List<int> outCells)
         {
             outCells.Clear();
@@ -361,7 +361,7 @@ namespace AI_Workshop02
 
         
         private void ExpandRandomBlob(
-            TerrainTypeData terrain,
+            TerrainRule terrain,
             int seedIndex, 
             int maxCells, 
             List<int> outCells)
@@ -433,7 +433,7 @@ namespace AI_Workshop02
                 
 
         private void ExpandRandomLichtenberg(
-            TerrainTypeData terrain,
+            TerrainRule terrain,
             byte terrainPaintId,
             int usedId, 
             int startIndex, 
@@ -586,7 +586,7 @@ namespace AI_Workshop02
             }
         }
 
-        private void WidenOnce(TerrainTypeData terrain, List<int> cells)
+        private void WidenOnce(TerrainRule terrain, List<int> cells)
         {
             EnsureGenBuffers();
             int stampId = NextMarkId();
@@ -640,7 +640,7 @@ namespace AI_Workshop02
 
         }
 
-        private bool TryPickRandomValidCell(TerrainTypeData terrain, out int index, int tries)
+        private bool TryPickRandomValidCell(TerrainRule terrain, out int index, int tries)
         {
             index = -1;
 
@@ -655,7 +655,7 @@ namespace AI_Workshop02
             return false;
         }
 
-        private bool TryPickRandomEdgeValidCell(TerrainTypeData terrain, out int index, int tries)
+        private bool TryPickRandomEdgeValidCell(TerrainRule terrain, out int index, int tries)
         {
             index = -1;
 
@@ -681,7 +681,7 @@ namespace AI_Workshop02
             return false;
         }
 
-        private bool TryPickOppositeEdgePair(TerrainTypeData terrain, out int start, out int goal, int tries)
+        private bool TryPickOppositeEdgePair(TerrainRule terrain, out int start, out int goal, int tries)
         {
             start = -1;
             goal = -1;
@@ -727,7 +727,7 @@ namespace AI_Workshop02
             return false;
         }
 
-        private bool CanUseCell(TerrainTypeData terrain, int idx)
+        private bool CanUseCell(TerrainRule terrain, int idx)
         {
             // Hard-block overwrite policy
             if (_blocked[idx])      
@@ -745,7 +745,7 @@ namespace AI_Workshop02
             return true;
         }
 
-        private bool CanPickCell(TerrainTypeData terrain, int idx)
+        private bool CanPickCell(TerrainRule terrain, int idx)
         {
             if (terrain.ForceUnblockedSeed && _blocked[idx]) return false;
             return CanUseCell(terrain, idx);

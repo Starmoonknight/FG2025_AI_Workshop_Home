@@ -46,7 +46,7 @@ public class LEGACY_BoardManager : MonoBehaviour
     private System.Random _goalRng;
 
     [Header("Generation Rules")]
-    [SerializeField] private AI_Workshop02.TerrainTypeData[] _rules;
+    [SerializeField] private AI_Workshop02.TerrainRule[] _rules;
 
     private byte[] _terrainId;
 

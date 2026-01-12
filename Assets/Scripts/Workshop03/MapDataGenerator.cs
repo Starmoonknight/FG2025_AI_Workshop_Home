@@ -3,12 +3,7 @@ using System.Collections.Generic;
 using System.Text;
 using UnityEngine;
 
-using static AI_Workshop02.TerrainTypeData;
-using ExpansionAreaFocus = AI_Workshop02.ExpansionAreaFocus;
-using LichtenbergEdgePairMode = AI_Workshop02.LichtenbergEdgePairMode; 
-using PlacementMode = AI_Workshop02.PlacementMode;
-using TerrainID = AI_Workshop02.TerrainID;
-using TerrainTypeData = AI_Workshop02.TerrainTypeData;
+using AreaFocusWeights = AI_Workshop03.TerrainTypeData.AreaFocusWeights;
 
 #if UNITY_EDITOR
 using UnityEditor;
@@ -1061,6 +1056,9 @@ namespace AI_Workshop03
                 return true;    
             }
 
+#if UNITY_EDITOR
+            Debug.LogWarning("TryPickFromPool_ByFocus: had to resort to fallback pick, a silent quality drop");
+#endif
             // fallback, give a randomly generated result back anyways 
             idx = _scratch.temp[_rng.Next(0,count)];
             return true;

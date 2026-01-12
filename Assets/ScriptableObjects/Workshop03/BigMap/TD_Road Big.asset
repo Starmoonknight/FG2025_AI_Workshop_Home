@@ -9,24 +9,24 @@ MonoBehaviour:
   m_GameObject: {fileID: 0}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 472b1421239d1bf4987317d939769f14, type: 3}
-  m_Name: TR_Road2
+  m_Script: {fileID: 11500000, guid: acf71f9a5eec86e45a549302e8e6d0c8, type: 3}
+  m_Name: TD_Road Big
   m_EditorClassIdentifier: Assembly-CSharp::AI_Workshop02.TerrainRule
-  DisplayName: Road
+  DisplayName: New Rule
   VisualPrefab: {fileID: 0}
   Color:
     serializedVersion: 2
-    rgba: 4283351025
-  Cost: 6
+    rgba: 4294967295
+  Cost: 10
   TerrainID: 0
   IsObstacle: 0
   ForceUnblockedSeed: 0
-  Mode: 2
-  CoveragePercent: 0.08
+  Mode: 0
+  CoveragePercent: 0.1
   AllowOverwriteObstacle: 0
-  OnlyAffectBase: 0
-  AllowOverwriteTerrain: 1
-  Order: 40
+  OnlyAffectBase: 1
+  AllowOverwriteTerrain: 0
+  Order: 1
   Static:
     PlacementArea: 0
     PlacementWeights:
@@ -67,19 +67,19 @@ MonoBehaviour:
       InteriorMinMargin: 2
     UseEdgePairPresets: 1
     EdgePairMode: 3
-    MinPathCount: 2
-    MaxPathCount: 4
-    CellsPerPath: 120
-    StepBudgetScale: 3
-    MaxActiveWalkers: 18
-    BranchSpawnChance: 0.3
-    GoalGrowthBias: 0.75
-    WidenPasses: 1
-    PreferUnusedCells: 0
+    MinPathCount: 4
+    MaxPathCount: 16
+    CellsPerPath: 180
+    StepBudgetScale: 1.8
+    MaxActiveWalkers: 14
+    BranchSpawnChance: 0.18
+    GoalGrowthBias: 0.72
+    WidenPasses: 0
+    PreferUnusedCells: 1
     AllowReuseIfStuck: 1
-    HeatRepelStrength: 0.8
+    HeatRepelStrength: 2
     HeatRepelRadius: 1
-    HeatAdd: 4
+    HeatAdd: 5
     HeatFalloff: 2
-    RepelPenaltyFromExisting: 0
+    RepelPenaltyFromExisting: 1
     ExistingCellPenalty: 8

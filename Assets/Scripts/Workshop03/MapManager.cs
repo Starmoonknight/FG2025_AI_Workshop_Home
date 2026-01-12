@@ -2,9 +2,6 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 
-using TerrainTypeData = AI_Workshop02.TerrainTypeData;
-using TerrainID = AI_Workshop02.TerrainID;
-
 
 namespace AI_Workshop03
 {

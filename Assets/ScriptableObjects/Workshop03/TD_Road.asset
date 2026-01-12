@@ -1,0 +1,85 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: acf71f9a5eec86e45a549302e8e6d0c8, type: 3}
+  m_Name: TD_Road
+  m_EditorClassIdentifier: Assembly-CSharp::AI_Workshop02.TerrainRule
+  DisplayName: New Rule
+  VisualPrefab: {fileID: 0}
+  Color:
+    serializedVersion: 2
+    rgba: 4294967295
+  Cost: 10
+  TerrainID: 0
+  IsObstacle: 0
+  ForceUnblockedSeed: 0
+  Mode: 2
+  CoveragePercent: 0.1
+  AllowOverwriteObstacle: 0
+  OnlyAffectBase: 1
+  AllowOverwriteTerrain: 0
+  Order: 1
+  Static:
+    PlacementArea: 0
+    PlacementWeights:
+      EdgeWeight: 0.15
+      InteriorWeight: 0.6
+      AnywhereWeight: 0.25
+      InteriorMarginPercent: 0.05
+      InteriorMinMargin: 2
+    ClusterBias: 0.55
+  Blob:
+    PlacementArea: 0
+    PlacementWeights:
+      EdgeWeight: 0.15
+      InteriorWeight: 0.6
+      AnywhereWeight: 0.25
+      InteriorMarginPercent: 0.05
+      InteriorMinMargin: 2
+    AvgBlobSize: 120
+    BlobSizeJitter: 60
+    MinBlobCount: 6
+    MaxBlobCount: 30
+    GrowChance: 0.55
+    SmoothPasses: 1
+  Lichtenberg:
+    OriginArea: 0
+    GrowthAimArea: 0
+    OriginWeights:
+      EdgeWeight: 0.15
+      InteriorWeight: 0.6
+      AnywhereWeight: 0.25
+      InteriorMarginPercent: 0.05
+      InteriorMinMargin: 2
+    GrowthAimWeights:
+      EdgeWeight: 0.15
+      InteriorWeight: 0.6
+      AnywhereWeight: 0.25
+      InteriorMarginPercent: 0.05
+      InteriorMinMargin: 2
+    UseEdgePairPresets: 1
+    EdgePairMode: 3
+    MinPathCount: 4
+    MaxPathCount: 16
+    CellsPerPath: 180
+    StepBudgetScale: 1.8
+    MaxActiveWalkers: 14
+    BranchSpawnChance: 0.18
+    GoalGrowthBias: 0.72
+    WidenPasses: 0
+    PreferUnusedCells: 1
+    AllowReuseIfStuck: 1
+    HeatRepelStrength: 2
+    HeatRepelRadius: 1
+    HeatAdd: 5
+    HeatFalloff: 2
+    RepelPenaltyFromExisting: 1
+    ExistingCellPenalty: 8

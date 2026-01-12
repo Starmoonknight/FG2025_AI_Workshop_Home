@@ -9,8 +9,8 @@ MonoBehaviour:
   m_GameObject: {fileID: 0}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 472b1421239d1bf4987317d939769f14, type: 3}
-  m_Name: TR_Swamp Big
+  m_Script: {fileID: 11500000, guid: acf71f9a5eec86e45a549302e8e6d0c8, type: 3}
+  m_Name: TD-O_Rock
   m_EditorClassIdentifier: Assembly-CSharp::AI_Workshop02.TerrainRule
   DisplayName: New Rule
   VisualPrefab: {fileID: 0}

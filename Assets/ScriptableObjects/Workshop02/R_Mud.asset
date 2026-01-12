@@ -9,25 +9,25 @@ MonoBehaviour:
   m_GameObject: {fileID: 0}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 472b1421239d1bf4987317d939769f14, type: 3}
-  m_Name: TR_Mud2
+  m_Script: {fileID: 11500000, guid: fec5726048f25cc478becae38d0b264e, type: 3}
+  m_Name: R_Mud
   m_EditorClassIdentifier: Assembly-CSharp::AI_Workshop02.TerrainRule
-  DisplayName: Mud
+  DisplayName: New Rule
   VisualPrefab: {fileID: 0}
   Color:
     serializedVersion: 2
-    rgba: 4282986599
-  Cost: 14
+    rgba: 4294967295
+  Cost: 10
   TerrainID: 0
   IsObstacle: 0
   ForceUnblockedSeed: 0
-  Mode: 1
-  CoveragePercent: 0.03
+  Mode: 0
+  CoveragePercent: 0.1
   AllowOverwriteObstacle: 0
-  OnlyAffectBase: 0
-  AllowOverwriteTerrain: 1
-  Order: 30
-  Static:
+  OnlyAffectBase: 1
+  AllowOverwriteTerrain: 0
+  Order: 1
+  Blob:
     PlacementArea: 0
     PlacementWeights:
       EdgeWeight: 0.15
@@ -35,21 +35,12 @@ MonoBehaviour:
       AnywhereWeight: 0.25
       InteriorMarginPercent: 0.05
       InteriorMinMargin: 2
-    ClusterBias: 0.55
-  Blob:
-    PlacementArea: 3
-    PlacementWeights:
-      EdgeWeight: 0.15
-      InteriorWeight: 0.55
-      AnywhereWeight: 0.3
-      InteriorMarginPercent: 0.06
-      InteriorMinMargin: 2
-    AvgBlobSize: 30
-    BlobSizeJitter: 25
-    MinBlobCount: 10
+    AvgBlobSize: 120
+    BlobSizeJitter: 60
+    MinBlobCount: 6
     MaxBlobCount: 30
-    GrowChance: 0.45
-    SmoothPasses: 0
+    GrowChance: 0.55
+    SmoothPasses: 1
   Lichtenberg:
     OriginArea: 0
     GrowthAimArea: 0
@@ -65,7 +56,7 @@ MonoBehaviour:
       AnywhereWeight: 0.25
       InteriorMarginPercent: 0.05
       InteriorMinMargin: 2
-    UseEdgePairPresets: 1
+    RequireOppositeEdgePair: 1
     EdgePairMode: 3
     MinPathCount: 4
     MaxPathCount: 16
