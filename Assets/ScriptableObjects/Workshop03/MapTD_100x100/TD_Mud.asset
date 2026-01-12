@@ -10,19 +10,19 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: acf71f9a5eec86e45a549302e8e6d0c8, type: 3}
-  m_Name: TD_Road
+  m_Name: TD_Mud
   m_EditorClassIdentifier: Assembly-CSharp::AI_Workshop02.TerrainRule
-  DisplayName: New Rule
+  DisplayName: Mud
   VisualPrefab: {fileID: 0}
   Color:
     serializedVersion: 2
-    rgba: 4294967295
-  Cost: 10
+    rgba: 4284642427
+  Cost: 16
   TerrainID: 0
   IsObstacle: 0
   ForceUnblockedSeed: 0
-  Mode: 2
-  CoveragePercent: 0.1
+  Mode: 1
+  CoveragePercent: 0.15
   AllowOverwriteObstacle: 0
   OnlyAffectBase: 1
   AllowOverwriteTerrain: 0
@@ -37,15 +37,15 @@ MonoBehaviour:
       InteriorMinMargin: 2
     ClusterBias: 0.55
   Blob:
-    PlacementArea: 0
+    PlacementArea: 3
     PlacementWeights:
       EdgeWeight: 0.15
-      InteriorWeight: 0.6
-      AnywhereWeight: 0.25
+      InteriorWeight: 0.55
+      AnywhereWeight: 0.3
       InteriorMarginPercent: 0.05
       InteriorMinMargin: 2
     AvgBlobSize: 120
-    BlobSizeJitter: 60
+    BlobSizeJitter: 80
     MinBlobCount: 6
     MaxBlobCount: 30
     GrowChance: 0.55

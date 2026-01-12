@@ -10,19 +10,19 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: acf71f9a5eec86e45a549302e8e6d0c8, type: 3}
-  m_Name: TD-O_Mountain Big
+  m_Name: TD_Road
   m_EditorClassIdentifier: Assembly-CSharp::AI_Workshop02.TerrainRule
-  DisplayName: New Rule
+  DisplayName: Road
   VisualPrefab: {fileID: 0}
   Color:
     serializedVersion: 2
-    rgba: 4294967295
+    rgba: 4283285716
   Cost: 10
   TerrainID: 0
   IsObstacle: 0
   ForceUnblockedSeed: 0
-  Mode: 0
-  CoveragePercent: 0.1
+  Mode: 2
+  CoveragePercent: 0.08
   AllowOverwriteObstacle: 0
   OnlyAffectBase: 1
   AllowOverwriteTerrain: 0
@@ -67,18 +67,18 @@ MonoBehaviour:
       InteriorMinMargin: 2
     UseEdgePairPresets: 1
     EdgePairMode: 3
-    MinPathCount: 4
-    MaxPathCount: 16
-    CellsPerPath: 180
-    StepBudgetScale: 1.8
-    MaxActiveWalkers: 14
-    BranchSpawnChance: 0.18
-    GoalGrowthBias: 0.72
+    MinPathCount: 2
+    MaxPathCount: 4
+    CellsPerPath: 10
+    StepBudgetScale: 2
+    MaxActiveWalkers: 4
+    BranchSpawnChance: 0.08
+    GoalGrowthBias: 0.7
     WidenPasses: 0
     PreferUnusedCells: 1
     AllowReuseIfStuck: 1
-    HeatRepelStrength: 2
-    HeatRepelRadius: 1
+    HeatRepelStrength: 3
+    HeatRepelRadius: 6
     HeatAdd: 5
     HeatFalloff: 2
     RepelPenaltyFromExisting: 1

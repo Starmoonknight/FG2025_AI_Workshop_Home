@@ -10,18 +10,18 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: acf71f9a5eec86e45a549302e8e6d0c8, type: 3}
-  m_Name: TD_Mud
+  m_Name: TD_Road Big
   m_EditorClassIdentifier: Assembly-CSharp::AI_Workshop02.TerrainRule
-  DisplayName: New Rule
+  DisplayName: Road
   VisualPrefab: {fileID: 0}
   Color:
     serializedVersion: 2
-    rgba: 4294967295
-  Cost: 10
+    rgba: 4286754521
+  Cost: 6
   TerrainID: 0
   IsObstacle: 0
   ForceUnblockedSeed: 0
-  Mode: 0
+  Mode: 2
   CoveragePercent: 0.1
   AllowOverwriteObstacle: 0
   OnlyAffectBase: 1
@@ -65,21 +65,21 @@ MonoBehaviour:
       AnywhereWeight: 0.25
       InteriorMarginPercent: 0.05
       InteriorMinMargin: 2
-    UseEdgePairPresets: 1
+    UseEdgePairPresets: 0
     EdgePairMode: 3
-    MinPathCount: 4
-    MaxPathCount: 16
-    CellsPerPath: 180
-    StepBudgetScale: 1.8
-    MaxActiveWalkers: 14
-    BranchSpawnChance: 0.18
-    GoalGrowthBias: 0.72
-    WidenPasses: 0
+    MinPathCount: 6
+    MaxPathCount: 18
+    CellsPerPath: 500
+    StepBudgetScale: 4
+    MaxActiveWalkers: 3
+    BranchSpawnChance: 0.1
+    GoalGrowthBias: 0.7
+    WidenPasses: 2
     PreferUnusedCells: 1
     AllowReuseIfStuck: 1
-    HeatRepelStrength: 2
-    HeatRepelRadius: 1
+    HeatRepelStrength: 20
+    HeatRepelRadius: 8
     HeatAdd: 5
     HeatFalloff: 2
     RepelPenaltyFromExisting: 1
-    ExistingCellPenalty: 8
+    ExistingCellPenalty: 16

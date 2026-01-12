@@ -10,16 +10,16 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: acf71f9a5eec86e45a549302e8e6d0c8, type: 3}
-  m_Name: TD-O_Rock
+  m_Name: TD-O_Rock Big
   m_EditorClassIdentifier: Assembly-CSharp::AI_Workshop02.TerrainRule
-  DisplayName: New Rule
+  DisplayName: Rock
   VisualPrefab: {fileID: 0}
   Color:
     serializedVersion: 2
-    rgba: 4294967295
+    rgba: 4279703330
   Cost: 10
   TerrainID: 0
-  IsObstacle: 0
+  IsObstacle: 1
   ForceUnblockedSeed: 0
   Mode: 0
   CoveragePercent: 0.1
@@ -35,7 +35,7 @@ MonoBehaviour:
       AnywhereWeight: 0.25
       InteriorMarginPercent: 0.05
       InteriorMinMargin: 2
-    ClusterBias: 0.55
+    ClusterBias: 0.65
   Blob:
     PlacementArea: 0
     PlacementWeights:
