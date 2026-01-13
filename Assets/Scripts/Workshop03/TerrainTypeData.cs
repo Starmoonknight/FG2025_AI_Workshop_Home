@@ -103,6 +103,11 @@ namespace AI_Workshop03
             )]
         [Min(1)] public int Order = 1;
 
+        [Tooltip(
+            "Relative weight for this terrain type when the generator picks which terrain to place.\n\n" +
+            "Higher values increase the chance of this terrain being selected earlier compared to others.")]
+        [Range(0, 1)] public float EarlyPlacementBias = 1;
+
 
 
 

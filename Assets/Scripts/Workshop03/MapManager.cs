@@ -53,6 +53,14 @@ namespace AI_Workshop03
         [SerializeField] private bool _dumpFocusWeights = true; 
         [SerializeField] private bool _dumpFocusWeightsVerbose = false;
 
+        /*
+        [Header("Debug: Generation Attempts")]
+        [SerializeField] private bool _logGenAttempts = true;
+        [SerializeField] private bool _logGenAttemptFailures = true;
+        [SerializeField] private bool _logPerTerrainSummary = true;
+        [SerializeField] private bool _logObstacleBudgetHits = true;
+        */
+
         [Header("Debug: A* Costs Overlay")]
         [SerializeField] private bool _showDebugCosts = true;
         [SerializeField] private TMPro.TextMeshPro _costLabelPrefab;
@@ -75,7 +83,7 @@ namespace AI_Workshop03
 
         // Grid Data
         private int _cellCount;
-        private bool[] _protected;         // if I in the future want the rng ExpandRandom methods to ignore certain tiles, (start/goal, maybe a border ring) that must never be selected:   if (_protected != null && _protected[i]) continue;
+        private bool[] _protected;  //look into storing as bitArray       // if I in the future want the rng ExpandRandom methods to ignore certain tiles, (start/goal, maybe a border ring) that must never be selected:   if (_protected != null && _protected[i]) continue;
         private bool[] _blocked;
         private byte[] _terrainKind;
         private int[] _terrainCost;
@@ -86,7 +94,7 @@ namespace AI_Workshop03
         private Color32[] _cellColors;
         private Texture2D _gridTexture;
         private bool _textureDirty;
-        private byte[] _painterId;
+        private byte[] _lastPaintLayerId;
 
         [Header("Colors")]
         [SerializeField]
@@ -156,14 +164,15 @@ namespace AI_Workshop03
             _terrainCost = new int[_cellCount];
             _baseCellColors = new Color32[_cellCount];
             _cellColors = new Color32[_cellCount];
-            _painterId = new byte[_cellCount];
+            _lastPaintLayerId = new byte[_cellCount];
 
-            int baseSeed = (_seed != 0) ? _seed : Environment.TickCount;
-            int genSeed = baseSeed;
-            int goalSeed = baseSeed ^ unchecked((int)0x9E3779B9);       // salted seed
+            int baseSeed  = (_seed != 0) ? _seed : Environment.TickCount;   // if seed is 0 use random seed
+            int genSeed   = baseSeed;                               // main generation randomness seed
+            int orderSeed = baseSeed ^ unchecked((int)0x73856093);  // terrain paint ordering randomness (rarity shuffle), salted seed
+            int goalSeed  = baseSeed ^ unchecked((int)0x9E3779B9);  // goal picking randomness, salted seed
 
             _lastGeneratedSeed = baseSeed;
-            Debug.Log($"[MapManager] Generated map with seed={baseSeed} (genSeed={genSeed})");
+            Debug.Log($"[MapManager] Generated map with seed={baseSeed} (genSeed={genSeed}) (orderSeed={orderSeed})");
             UpdateSeedHud();
 
             _goalRng = new System.Random(goalSeed);
@@ -175,7 +184,7 @@ namespace AI_Workshop03
                 _terrainCost[i] = 10;
                 _baseCellColors[i] = _walkableColor;
 
-                _painterId[i] = 0;
+                _lastPaintLayerId[i] = 0;
                 _terrainKind[i] = (byte)TerrainID.Land;
             }
 
@@ -198,10 +207,11 @@ namespace AI_Workshop03
                 _terrainKind,           // what kind of terrain type this tile is, id: 0 = basic/land   (Land/Liquid/etc)
                 _terrainCost,           // cost modifier of moving over this tile
                 _baseCellColors,        // base colors before any external modifiers
-                _painterId,             // what TerrainData affect this, layer id: 0 = base 
+                _lastPaintLayerId,      // what TerrainData affect this, layer id: 0 = base 
                 _walkableColor,         // base color before any terrain modifier
                 10,                     // base cost before any terrain modifier
                 genSeed,                // seed (0 means random)
+                orderSeed,              // terrain paint ordering randomness (rarity shuffle)
                 _terrainData,           // TerrainData[]
                 _maxGenerateAttempts,   // limit for map generator
                 _minUnblockedPercent,   // ratio of allowd un-blocked to blocked tiles 
@@ -449,14 +459,14 @@ namespace AI_Workshop03
 
             if (isWalkable)
             {
-                _painterId[index] = 0;
+                _lastPaintLayerId[index] = 0;
                 _terrainKind[index] = (byte)TerrainID.Land;
                 _terrainCost[index] = 10;
                 _baseCellColors[index] = _walkableColor;
             }
             else
             {
-                _painterId[index] = 0;
+                _lastPaintLayerId[index] = 0;
                 _terrainKind[index] = (byte)TerrainID.Land;
                 _terrainCost[index] = 0;
                 _baseCellColors[index] = _obstacleColor;

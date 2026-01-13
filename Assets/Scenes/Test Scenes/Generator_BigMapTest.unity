@@ -607,6 +607,16 @@ MonoBehaviour:
   _minReachablePercent: 0.75
   _maxGenerateAttempts: 50
   _terrainData:
+  - {fileID: 11400000, guid: 35d23499d3d9f9b43a1ecfa87c16fc09, type: 2}
+  - {fileID: 11400000, guid: c7048e40867078440b2180ce8128f44f, type: 2}
+  - {fileID: 11400000, guid: 63c84b1df77582942b53a6b72f5cfdfb, type: 2}
+  - {fileID: 11400000, guid: 29ae17603b2746f44bc9b6ba309b0364, type: 2}
+  - {fileID: 11400000, guid: 5c1ba2d1f72ad8642a8305d50565753f, type: 2}
+  - {fileID: 11400000, guid: ea26128e3c2a60e4dac0a13d92ecdc40, type: 2}
+  - {fileID: 11400000, guid: ed50f5ec955d75140b91cf0b0e54181b, type: 2}
+  - {fileID: 11400000, guid: cc6c29f1888a8ec439043b2811ca921b, type: 2}
+  - {fileID: 11400000, guid: 90bea726e6a70f244b6eae7da029c84a, type: 2}
+  - {fileID: 11400000, guid: ef0476bd1055b7544ab6fd670fa36fa6, type: 2}
   - {fileID: 11400000, guid: 25c8eb9bca67bc74ead75032ed857f88, type: 2}
   - {fileID: 11400000, guid: 1b960c19c0eed8e43bf4883323f2aa47, type: 2}
   - {fileID: 11400000, guid: 418e50fa74ee0ce4dbe1433a91663efb, type: 2}
@@ -619,7 +629,7 @@ MonoBehaviour:
   _seedHudLabel: {fileID: 332636614}
   _seedHudPrefix: 'Seed: '
   _dumpFocusWeights: 1
-  _dumpFocusWeightsVerbose: 0
+  _dumpFocusWeightsVerbose: 1
   _showDebugCosts: 0
   _costLabelPrefab: {fileID: 6433729425798609155, guid: f2738bf5725d73e47b3baf4e4a0218dc, type: 3}
   _costLabelRoot: {fileID: 1524415437}

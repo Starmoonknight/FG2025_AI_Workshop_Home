@@ -39,16 +39,25 @@ namespace AI_Workshop03
         private int _height;
         private int _cellCount;
 
+        private int _blockedCount;
+        private int _maxBlockedBudget;
+
         private bool[] _blocked;
         private byte[] _terrainKind;
         private int[] _terrainCost;
         private Color32[] _baseColors;
-        private byte[] _painterId;
+        private byte[] _lastPaintLayerId;
 
         private Color32 _baseWalkableColor;
         private int _baseWalkableCost;
 
         private System.Random _rng;
+        private System.Random _rngOrder;
+
+
+        // Early/Late placement bias weights
+        private const double MinEarlyWeight = 0.1;   // bias=0 still has a chance
+        private const double MaxEarlyWeight = 10.0;  // bias=1 strongly favored
 
 
         public bool Debug_DumpFocusWeights { get; set; } = false;
@@ -81,6 +90,7 @@ namespace AI_Workshop03
             Color32 baseWalkableColor,
             int baseWalkableCost,
             int seed,
+            int orderSeed,
             TerrainTypeData[] terrainData,
             int maxGenerateAttempts,
             float minUnblockedPercent,
@@ -90,6 +100,7 @@ namespace AI_Workshop03
         {
 
             // --- Get reference pointers to current game board ---
+
             _width = width;
             _height = height;
             _cellCount = checked(width * height);
@@ -98,36 +109,75 @@ namespace AI_Workshop03
             _terrainKind = terrainKind ?? throw new ArgumentNullException(nameof(terrainKind));
             _terrainCost = terrainCost ?? throw new ArgumentNullException(nameof(terrainCost));
             _baseColors = baseColors ?? throw new ArgumentNullException(nameof(baseColors));
-            _painterId = painterId ?? throw new ArgumentNullException(nameof(painterId));
+            _lastPaintLayerId = painterId ?? throw new ArgumentNullException(nameof(painterId));
 
             if (_blocked.Length != _cellCount || _terrainKind.Length != _cellCount || _terrainCost.Length != _cellCount ||
-                _baseColors.Length != _cellCount || _painterId.Length != _cellCount)
+                _baseColors.Length != _cellCount || _lastPaintLayerId.Length != _cellCount)
                 throw new ArgumentException("Board arrays length mismatch.");
 
             _baseWalkableColor = baseWalkableColor;
             _baseWalkableCost = baseWalkableCost;
 
             _rng = new System.Random(seed);
+            _rngOrder = new System.Random(orderSeed);
+
 
             terrainData ??= Array.Empty<TerrainTypeData>();
 
 
+            // --- Compute max blocked budget based on min unblocked percent ---
+
+            float minUnblocked = Mathf.Clamp01(minUnblockedPercent);
+
+            int minWalkableCells = Mathf.CeilToInt(minUnblocked * _cellCount);
+            minWalkableCells = Mathf.Clamp(minWalkableCells, 0, _cellCount);
+
+            _maxBlockedBudget = _cellCount - minWalkableCells;
+
+
             // --- Generate Debug Data  ---
+
             DebugDumpFocusWeights(seed, terrainData);
 
 
+
             // --- Organize all terrains in use  ---
-            Array.Sort(terrainData, (a, b) => (a?.Order ?? 0).CompareTo(b?.Order ?? 0));
+
+            var obstaclesList = new List<TerrainTypeData>(terrainData.Length);
+            var walkablesList = new List<TerrainTypeData>(terrainData.Length);
+            for (int i = 0; i < terrainData.Length; i++)
+            {
+                var terrain = terrainData[i];
+                if (terrain == null) continue;
+
+                if (terrain.IsObstacle) obstaclesList.Add(terrain);
+                else walkablesList.Add(terrain);
+            }
+
+            ShuffleWithinOrderBucketsByEarlyBias(obstaclesList, _rngOrder);
+            ShuffleWithinOrderBucketsByEarlyBias(walkablesList, _rngOrder);
 
 
             var terrainDataId = new Dictionary<TerrainTypeData, byte>(terrainData.Length);            // terrainId is assigned by list order after sorting, 0 reserved for base
             byte nextId = 1;
-            for (int i = 0; i < terrainData.Length; i++)
+            for (int i = 0; i < obstaclesList.Count && nextId != byte.MaxValue; i++)    // assign all obstacles IDs first
             {
-                if (terrainData[i] == null) continue;
-                if (nextId == byte.MaxValue) break;                                         // safety cap, if too many terrain types are listed 
-                terrainDataId[terrainData[i]] = nextId++;
+                var terrainObst = obstaclesList[i];
+                if (terrainObst == null) continue;
+
+                if (!terrainDataId.ContainsKey(terrainObst))
+                    terrainDataId[terrainObst] = nextId++;
             }
+
+            for (int i = 0; i < walkablesList.Count && nextId != byte.MaxValue; i++)    // then assign all walkables IDs
+            {
+                var terrainWalk = walkablesList[i];
+                if (terrainWalk == null) continue;
+
+                if (!terrainDataId.ContainsKey(terrainWalk))
+                    terrainDataId[terrainWalk] = nextId++;
+            }
+
 
             int startIndex = CoordToIndex(_width / 2, _height / 2);
 
@@ -136,13 +186,17 @@ namespace AI_Workshop03
             {
                 ResetToBase();
 
-                for (int i = 0; i < terrainData.Length; i++)                               // obstacle placement before other terrain types
+                for (int i = 0; i < obstaclesList.Count; i++)                               // obstacle placement before other terrain types
                 {
-                    var terrain = terrainData[i];
+                    if (_blockedCount >= _maxBlockedBudget)
+                        break;
+
+                    var terrain = obstaclesList[i];
                     if (terrain == null || !terrain.IsObstacle) continue;
 
                     if (!terrainDataId.TryGetValue(terrain, out byte id))
                         continue;
+
                     ApplyTerrainData(terrain, id, isObstacle: true);
                 }
 
@@ -170,13 +224,14 @@ namespace AI_Workshop03
                 {
                     ResetWalkableToBaseOnly();                                              // reset walkable tiles to base visuals/cost/id so terrain can build from clean base
 
-                    for (int i = 0; i < terrainData.Length; i++)
+                    for (int i = 0; i < walkablesList.Count; i++)
                     {
-                        var terrain = terrainData[i];
+                        var terrain = walkablesList[i];
                         if (terrain == null || terrain.IsObstacle) continue;
 
                         if (!terrainDataId.TryGetValue(terrain, out byte id))
                             continue;
+
                         ApplyTerrainData(terrain, id, isObstacle: false);
                     }
 
@@ -186,13 +241,14 @@ namespace AI_Workshop03
 
             // --- Fallback if to many attempts, keep last version and ensure walkable visuals are consistent ---
             ResetWalkableToBaseOnly();
-            for (int i = 0; i < terrainData.Length; i++)
+            for (int i = 0; i < walkablesList.Count; i++)
             {
-                var terrain = terrainData[i];
+                var terrain = walkablesList[i];
                 if (terrain == null || terrain.IsObstacle) continue;
 
                 if (!terrainDataId.TryGetValue(terrain, out byte id))
                     continue;
+
                 ApplyTerrainData(terrain, id, isObstacle: false);
             }
         }
@@ -200,7 +256,81 @@ namespace AI_Workshop03
 
 
 
-        #region Cell Data
+        #region Terrain Application
+
+
+        private static double BiasToWeight(float bias01)
+        {
+            bias01 = Mathf.Clamp01(bias01);
+
+            // Geometric lerp: min * (max/min)^t
+            // makes 0.5 actually be the midpoint between min and max in multiplicative scale
+            double ratio = MaxEarlyWeight / MinEarlyWeight;
+            return MinEarlyWeight * Math.Pow(ratio, bias01);
+        }
+
+        /// <summary>
+        /// Weighted random permutation (without replacement) on a subrange.
+        /// Uses Efraimidis–Spirakis style keys: key = -ln(U)/w, sort ascending.
+        /// </summary>
+        private static void WeightedShuffleRangeByEarlyBias(
+            List<TerrainTypeData> list,
+            int start,
+            int count,
+            System.Random rngOrder)
+        {
+
+            if (count <= 1) return;
+
+            var keys = new double[count];
+            var items = new TerrainTypeData[count];
+
+            for (int k = 0; k < count; k++)
+            {
+                TerrainTypeData terrain = list[start + k];
+                items[k] = terrain;
+
+                float bias = (terrain != null) ? terrain.EarlyPlacementBias : 0f;
+                double w = BiasToWeight(bias);
+                if (w <= 0) w = 1e-9;
+
+                double u = 1.0 - rngOrder.NextDouble(); // (0,1]
+                keys[k] = -Math.Log(u) / w; // smaller key => earlier
+            }
+
+            Array.Sort(keys, items);        // ascending
+            for (int k = 0; k < count; k++)
+                list[start + k] = items[k];
+        }
+
+        /// <summary>
+        /// Preserves Order as "priority buckets": sorts by Order, then weighted-shuffles each equal-Order run.
+        /// </summary>
+        private static void ShuffleWithinOrderBucketsByEarlyBias(
+            List<TerrainTypeData> list,
+            System.Random rngOrder
+            )
+        {
+            // first sort by order
+            list.Sort((a, b) => (a?.Order ?? 0).CompareTo(b?.Order ?? 0));
+
+            // then shuffle each bucket by weighted early bias 
+            int bucketStart = 0;
+            while (bucketStart < list.Count)
+            {
+                int bucketOrder = list[bucketStart]?.Order ?? 0;
+                int bucketEndExclusive = bucketStart + 1;
+
+                while (bucketEndExclusive < list.Count && ((list[bucketEndExclusive]?.Order ?? 0) == bucketOrder))
+                    bucketEndExclusive++;
+
+                int bucketCount = bucketEndExclusive - bucketStart;
+                WeightedShuffleRangeByEarlyBias(list, bucketStart, bucketCount, rngOrder);
+
+                bucketStart = bucketEndExclusive;
+            }
+        }
+
 
         private void ApplyTerrainData(TerrainTypeData terrain, byte terrainLayerId, bool isObstacle)
         {
@@ -238,20 +368,57 @@ namespace AI_Workshop03
             int desiredCells = Mathf.RoundToInt(terrain.CoveragePercent * _cellCount);
             if (desiredCells <= 0) return;
 
+            EnsureGenBuffers();
+
+            // a shared memory stamp for this terrain to keep from overlapping blobs
+            int unionId = NextMarkId();
+
             int avgSize = Mathf.Max(1, terrain.Blob.AvgBlobSize);
             int blobCount = desiredCells / avgSize;
             blobCount = Mathf.Clamp(blobCount, terrain.Blob.MinBlobCount, terrain.Blob.MaxBlobCount);
 
             for (int b = 0; b < blobCount; b++)
             {
-                if (!TryPickCell_ByFocusArea(terrain, terrain.Blob.PlacementArea, terrain.Blob.PlacementWeights, out int seed, 256))
-                    break;
+                int seed = -1;
+                bool foundSeed = false;
 
-                int size = avgSize + _rng.Next(-terrain.Blob.BlobSizeJitter, terrain.Blob.BlobSizeJitter + 1);
+
+                // try to find a seed that is not already part of this terrain's, up to 64 tries internaly for each attempt
+                for (int attempt = 0; attempt < 6; attempt++)
+                {                    
+                    if (!TryPickCell_ByFocusArea(terrain, terrain.Blob.PlacementArea, terrain.Blob.PlacementWeights, out seed, 64))
+                    {
+                        foundSeed = false;
+                        break;
+                    }
+
+                    if (_scratch.used[seed] == unionId)
+                        continue;  
+
+                    foundSeed = true;
+                    break;
+                }
+
+                if (!foundSeed) break;
+
+                int remaining = desiredCells - outCells.Count;
+                if (remaining <= 0) break;
+
+
+                int jitter = Mathf.Max(0, terrain.Blob.BlobSizeJitter);
+                int size = avgSize + _rng.Next(-jitter, jitter + 1);
+
+                // blobs should't be tiny but also not exceed remaining cells
                 size = Mathf.Max(10, size);
+                size = Math.Min(size, remaining);
+
 
                 _scratch.temp.Clear();
-                ExpandRandomBlob(terrain, seed, size, _scratch.temp);
+                ExpandRandomBlob(terrain, seed, size, unionId, _scratch.temp);
+
+                // if blob could not grow any cells, stop looping
+                if (_scratch.temp.Count == 0) break;
+
                 outCells.AddRange(_scratch.temp);
             }
         }
@@ -266,7 +433,8 @@ namespace AI_Workshop03
 
             int usedId = NextMarkId();
 
-            int desiredCells = Mathf.RoundToInt(terrain.CoveragePercent * _cellCount);
+            float coverage = Mathf.Clamp01(terrain.CoveragePercent);
+            int desiredCells = Mathf.RoundToInt(coverage * _cellCount);
             if (desiredCells <= 0) return;
 
             int perPath = Mathf.Max(1, terrain.Lichtenberg.CellsPerPath);
@@ -330,7 +498,7 @@ namespace AI_Workshop03
                 _terrainKind[index] = (byte)terrain.TerrainID;
                 _terrainCost[index] = terrain.Cost;
                 _baseColors[index] = terrain.Color;
-                _painterId[index] = terrainLayerId;
+                _lastPaintLayerId[index] = terrainLayerId;
             }
         }
 
@@ -338,15 +506,22 @@ namespace AI_Workshop03
         {
             for (int i = 0; i < cells.Count; i++)
             {
+                if (_blockedCount >= _maxBlockedBudget)
+                    break; // reached max blocked budget, early out stop
+
                 int index = cells[i];
                 if (!IsValidCell(index)) continue;
-
                 if (!CanUseCell(terrain, index)) continue;
 
+                if(_blocked[index])
+                    continue; // already blocked
+
                 _blocked[index] = true;
+                _blockedCount++;
+
                 _terrainKind[index] = (byte)terrain.TerrainID;
                 _terrainCost[index] = 0;
-                _painterId[index] = terrainLayerId;
+                _lastPaintLayerId[index] = terrainLayerId;
                 _baseColors[index] = terrain.Color;
             }
         }
@@ -484,6 +659,7 @@ namespace AI_Workshop03
             TerrainTypeData terrain,
             int seedIndex,
             int maxCells,
+            int unionId,
             List<int> outCells)
         {
             outCells.Clear();
@@ -491,12 +667,17 @@ namespace AI_Workshop03
             if (!CanUseCell(terrain, seedIndex)) return;
 
             EnsureGenBuffers();
+            
+            if(_scratch.used[seedIndex] == unionId)
+                return; // already part of this terrain's union
+
             int stampId = NextMarkId();
 
             int head = 0;
             int tail = 0;
 
             _scratch.stamp[seedIndex] = stampId;
+            _scratch.used[seedIndex] = unionId;
             _scratch.queue[tail++] = seedIndex;
             outCells.Add(seedIndex);
 
@@ -514,11 +695,14 @@ namespace AI_Workshop03
                 {
                     var (dirX, dirY) = Neighbors4[neighbor];
                     if (!TryCoordToIndex(x + dirX, y + dirY, out int next)) continue;
-                    if (_scratch.stamp[next] == stampId) continue;
+
+                    if (_scratch.stamp[next] == stampId) continue;  // allready in this blob
+                    if (_scratch.used[next] == unionId) continue;   // already part of a previous blob of same terrain
                     if (!CanUseCell(terrain, next)) continue;
                     if (_rng.NextDouble() > growChance) continue;
 
                     _scratch.stamp[next] = stampId;
+                    _scratch.used[next] = unionId;
                     _scratch.queue[tail++] = next;
                     outCells.Add(next);
 
@@ -541,10 +725,13 @@ namespace AI_Workshop03
                     {
                         var (dirX, dirY) = Neighbors4[neighbor];
                         if (!TryCoordToIndex(x + dirX, y + dirY, out int next)) continue;
+
                         if (_scratch.stamp[next] == stampId) continue;
+                        if (_scratch.used[next] == unionId) continue;
                         if (!CanUseCell(terrain, next)) continue;
 
                         _scratch.stamp[next] = stampId;
+                        _scratch.used[next] = unionId;
                         outCells.Add(next);
                     }
                 }
@@ -597,23 +784,41 @@ namespace AI_Workshop03
                 int stepX = Math.Sign(targetX - x);
                 int stepY = Math.Sign(targetY - y);
 
+
                 // Code memo to remember new words;
                 // Span is a stack only ref struct
                 // Stackalloc allocates a block of memory on the stack, not the heap. It’s extremely fast and automatically freed when the method scope ends (no GC, no pooling).    
                 Span<(int dirX, int dirY)> candidates = stackalloc (int, int)[8];
                 int cCount = 0;
 
+                static void AddCandidateUnique(
+                    Span<(int dirX, int dirY)> cand,
+                    ref int count,
+                    int dx,
+                    int dy)
+                {
+                    for (int i = 0; i < count; i++)
+                    {
+                        if (cand[i].dirX == dx && cand[i].dirY == dy)
+                            return;
+                    }
+
+                    if (count < cand.Length)
+                        cand[count++] = (dx, dy);
+                }
+
+
                 bool hasX = stepX != 0;
                 bool hasY = stepY != 0;
 
-                if (hasX) candidates[cCount++] = (stepX, 0);
-                if (hasY) candidates[cCount++] = (0, stepY);
+                if (hasX) AddCandidateUnique(candidates, ref cCount, stepX, 0);
+                if (hasY) AddCandidateUnique(candidates, ref cCount, 0, stepY);
 
-                if (hasX) { candidates[cCount++] = (stepX, 1); candidates[cCount++] = (stepX, -1); }
-                if (hasY) { candidates[cCount++] = (1, stepY); candidates[cCount++] = (-1, stepY); }
+                if (hasX) { AddCandidateUnique(candidates, ref cCount, stepX, 1); AddCandidateUnique(candidates, ref cCount, stepX, -1); }
+                if (hasY) { AddCandidateUnique(candidates, ref cCount, 1, stepY); AddCandidateUnique(candidates, ref cCount, -1, stepY); }
 
-                if (hasX) candidates[cCount++] = (-stepX, 0);
-                if (hasY) candidates[cCount++] = (0, -stepY);
+                if (hasX) AddCandidateUnique(candidates, ref cCount, -stepX, 0);
+                if (hasY) AddCandidateUnique(candidates, ref cCount, 0, -stepY);
 
 
                 int nextIndex = -1;
@@ -648,7 +853,7 @@ namespace AI_Workshop03
                             continue;
 
                         bool usedByEarlierPaths = (_scratch.used[cand] == usedId);
-                        bool usedByThisTerrainAlready = (_painterId[cand] == terrainPaintId);
+                        bool usedByThisTerrainAlready = (_lastPaintLayerId[cand] == terrainPaintId);
 
                         bool used = usedByEarlierPaths || usedByThisTerrainAlready;
                         if (!allowUsedThisPass && used)
@@ -741,7 +946,6 @@ namespace AI_Workshop03
         #endregion
 
 
-
         #region Cell Pickers
 
         private bool CanUseCell(TerrainTypeData terrain, int idx)
@@ -751,7 +955,7 @@ namespace AI_Workshop03
                 return terrain.AllowOverwriteObstacle;  //  (obstacle overwrite)
 
             // Terrain overwrite gating (painterId = layer; 0 = base)        
-            bool isBase = (_painterId[idx] == 0);
+            bool isBase = (_lastPaintLayerId[idx] == 0);
 
             if (terrain.OnlyAffectBase)                 // can this only effect base terrain tile?      (terrain overwrite)
                 return isBase;
@@ -777,7 +981,7 @@ namespace AI_Workshop03
             {
                 int i = _rng.Next(0, _cellCount);
                 if (_blocked[i]) continue;
-                if (requireBase && _painterId[i] != 0) continue;
+                if (requireBase && _lastPaintLayerId[i] != 0) continue;
                 index = i;
                 return true;
             }
@@ -850,36 +1054,6 @@ namespace AI_Workshop03
 
             index = candIdx;
             return true;
-        }
-
-
-
-
-        // Look into 
-        private bool TryPickCell_CenterArea(TerrainTypeData terrain, out int index, int tries)
-        {
-            index = -1;
-            int centerX = _width / 2;
-            int centerY = _height / 2;
-            int areaWidth = Mathf.Max(1, _width / 4);
-            int areaHeight = Mathf.Max(1, _height / 4);
-            int minX = centerX - areaWidth / 2;
-            int maxX = centerX + areaWidth / 2;
-            int minY = centerY - areaHeight / 2;
-            int maxY = centerY + areaHeight / 2;
-            for (int t = 0; t < tries; t++)
-            {
-                int x = _rng.Next(minX, maxX);
-                int y = _rng.Next(minY, maxY);
-                if (x < 0 || x >= _width || y < 0 || y >= _height) continue;
-
-                int candIdx = CoordToIndex(x, y);
-                if (!CanPickCell(terrain, candIdx)) continue;
-
-                index = candIdx;
-                return true;
-            }
-            return false;
         }
 
 
@@ -1277,7 +1451,9 @@ namespace AI_Workshop03
                 _terrainKind[i] = (byte)TerrainID.Land;
                 _terrainCost[i] = _baseWalkableCost;
                 _baseColors[i] = _baseWalkableColor;
-                _painterId[i] = 0;
+                _lastPaintLayerId[i] = 0;
+
+                _blockedCount = 0;
             }
         }
 
@@ -1290,7 +1466,7 @@ namespace AI_Workshop03
                 _terrainKind[i] = (byte)TerrainID.Land;
                 _terrainCost[i] = _baseWalkableCost;
                 _baseColors[i] = _baseWalkableColor;
-                _painterId[i] = 0;
+                _lastPaintLayerId[i] = 0;
             }
         }
 

@@ -10,23 +10,24 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: acf71f9a5eec86e45a549302e8e6d0c8, type: 3}
-  m_Name: TD-O_Mountain Big
-  m_EditorClassIdentifier: Assembly-CSharp::AI_Workshop02.TerrainRule
-  DisplayName: Mountain Range
+  m_Name: TD_Grass
+  m_EditorClassIdentifier: Assembly-CSharp::AI_Workshop03.TerrainTypeData
+  DisplayName: New Rule
   VisualPrefab: {fileID: 0}
   Color:
     serializedVersion: 2
-    rgba: 4283120700
+    rgba: 4286830505
   Cost: 10
   TerrainID: 0
-  IsObstacle: 1
+  IsObstacle: 0
   ForceUnblockedSeed: 0
-  Mode: 2
-  CoveragePercent: 0.2
+  Mode: 0
+  CoveragePercent: 1
   AllowOverwriteObstacle: 0
   OnlyAffectBase: 1
   AllowOverwriteTerrain: 0
-  Order: 1
+  Order: 2
+  EarlyPlacementBias: 1
   Static:
     PlacementArea: 0
     PlacementWeights:
@@ -66,20 +67,20 @@ MonoBehaviour:
       InteriorMarginPercent: 0.05
       InteriorMinMargin: 2
     UseEdgePairPresets: 1
-    EdgePairMode: 4
-    MinPathCount: 30
-    MaxPathCount: 90
-    CellsPerPath: 1200
-    StepBudgetScale: 4
-    MaxActiveWalkers: 20
-    BranchSpawnChance: 0.2
-    GoalGrowthBias: 0.52
-    WidenPasses: 4
+    EdgePairMode: 3
+    MinPathCount: 4
+    MaxPathCount: 16
+    CellsPerPath: 180
+    StepBudgetScale: 1.8
+    MaxActiveWalkers: 14
+    BranchSpawnChance: 0.18
+    GoalGrowthBias: 0.72
+    WidenPasses: 0
     PreferUnusedCells: 1
-    AllowReuseIfStuck: 0
-    HeatRepelStrength: 5
-    HeatRepelRadius: 4
-    HeatAdd: 4
+    AllowReuseIfStuck: 1
+    HeatRepelStrength: 2
+    HeatRepelRadius: 1
+    HeatAdd: 5
     HeatFalloff: 2
     RepelPenaltyFromExisting: 1
     ExistingCellPenalty: 8

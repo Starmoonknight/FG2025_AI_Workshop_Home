@@ -10,23 +10,24 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: acf71f9a5eec86e45a549302e8e6d0c8, type: 3}
-  m_Name: TD_Road Big
-  m_EditorClassIdentifier: Assembly-CSharp::AI_Workshop02.TerrainRule
-  DisplayName: Road
+  m_Name: TD-O_DenseForrest
+  m_EditorClassIdentifier: Assembly-CSharp::AI_Workshop03.TerrainTypeData
+  DisplayName: New Rule
   VisualPrefab: {fileID: 0}
   Color:
     serializedVersion: 2
-    rgba: 4286754521
-  Cost: 6
+    rgba: 4278214402
+  Cost: 10
   TerrainID: 0
-  IsObstacle: 0
+  IsObstacle: 1
   ForceUnblockedSeed: 0
-  Mode: 2
-  CoveragePercent: 0.1
+  Mode: 1
+  CoveragePercent: 0.06
   AllowOverwriteObstacle: 0
   OnlyAffectBase: 1
   AllowOverwriteTerrain: 0
-  Order: 1
+  Order: 5
+  EarlyPlacementBias: 0.8
   Static:
     PlacementArea: 0
     PlacementWeights:
@@ -44,11 +45,11 @@ MonoBehaviour:
       AnywhereWeight: 0.25
       InteriorMarginPercent: 0.05
       InteriorMinMargin: 2
-    AvgBlobSize: 120
-    BlobSizeJitter: 60
-    MinBlobCount: 6
-    MaxBlobCount: 30
-    GrowChance: 0.55
+    AvgBlobSize: 22000
+    BlobSizeJitter: 14000
+    MinBlobCount: 2
+    MaxBlobCount: 7
+    GrowChance: 0.58
     SmoothPasses: 1
   Lichtenberg:
     OriginArea: 0
@@ -65,21 +66,21 @@ MonoBehaviour:
       AnywhereWeight: 0.25
       InteriorMarginPercent: 0.05
       InteriorMinMargin: 2
-    UseEdgePairPresets: 0
+    UseEdgePairPresets: 1
     EdgePairMode: 3
-    MinPathCount: 6
-    MaxPathCount: 18
-    CellsPerPath: 500
-    StepBudgetScale: 4
-    MaxActiveWalkers: 3
-    BranchSpawnChance: 0.1
-    GoalGrowthBias: 0.7
-    WidenPasses: 2
+    MinPathCount: 4
+    MaxPathCount: 16
+    CellsPerPath: 180
+    StepBudgetScale: 1.8
+    MaxActiveWalkers: 14
+    BranchSpawnChance: 0.18
+    GoalGrowthBias: 0.72
+    WidenPasses: 0
     PreferUnusedCells: 1
     AllowReuseIfStuck: 1
-    HeatRepelStrength: 20
-    HeatRepelRadius: 8
+    HeatRepelStrength: 2
+    HeatRepelRadius: 1
     HeatAdd: 5
     HeatFalloff: 2
     RepelPenaltyFromExisting: 1
-    ExistingCellPenalty: 16
+    ExistingCellPenalty: 8

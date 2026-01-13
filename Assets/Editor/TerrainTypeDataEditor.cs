@@ -17,7 +17,7 @@ namespace AI_Workshop03.Editor
 
         private SerializedProperty _mode, _coveragePercent;
 
-        private SerializedProperty _allowOverwriteObstacle, _onlyAffectBase, _allowOverwriteTerrain, _order;
+        private SerializedProperty _allowOverwriteObstacle, _onlyAffectBase, _allowOverwriteTerrain, _order, _earlyPlacementBias;
 
         // Param structs
         private SerializedProperty _static, _blob, _lichtenberg;
@@ -86,6 +86,7 @@ namespace AI_Workshop03.Editor
             _onlyAffectBase = serializedObject.FindProperty(nameof(TD.OnlyAffectBase));
             _allowOverwriteTerrain = serializedObject.FindProperty(nameof(TD.AllowOverwriteTerrain));
             _order = serializedObject.FindProperty(nameof(TD.Order));
+            _earlyPlacementBias = serializedObject.FindProperty(nameof(TD.EarlyPlacementBias));
 
             // Param structs
             _static = serializedObject.FindProperty(nameof(TD.Static));
@@ -220,6 +221,7 @@ namespace AI_Workshop03.Editor
                 }
 
                 EditorGUILayout.PropertyField(_order);
+                EditorGUILayout.PropertyField(_earlyPlacementBias);
             }
             EditorGUILayout.EndFoldoutHeaderGroup();
         }

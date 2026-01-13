@@ -10,23 +10,24 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: acf71f9a5eec86e45a549302e8e6d0c8, type: 3}
-  m_Name: TD-O_Eldrich Big
+  m_Name: TD_Mud_Big
   m_EditorClassIdentifier: Assembly-CSharp::AI_Workshop02.TerrainRule
-  DisplayName: Eldritch Corruption
+  DisplayName: Mud
   VisualPrefab: {fileID: 0}
   Color:
     serializedVersion: 2
-    rgba: 4286583898
-  Cost: 10
+    rgba: 4284644202
+  Cost: 16
   TerrainID: 0
-  IsObstacle: 1
+  IsObstacle: 0
   ForceUnblockedSeed: 0
-  Mode: 2
-  CoveragePercent: 0.1
-  AllowOverwriteObstacle: 1
-  OnlyAffectBase: 0
-  AllowOverwriteTerrain: 1
+  Mode: 1
+  CoveragePercent: 0.3
+  AllowOverwriteObstacle: 0
+  OnlyAffectBase: 1
+  AllowOverwriteTerrain: 0
   Order: 1
+  EarlyPlacementBias: 1
   Static:
     PlacementArea: 0
     PlacementWeights:
@@ -44,15 +45,15 @@ MonoBehaviour:
       AnywhereWeight: 0.25
       InteriorMarginPercent: 0.05
       InteriorMinMargin: 2
-    AvgBlobSize: 120
-    BlobSizeJitter: 60
-    MinBlobCount: 6
-    MaxBlobCount: 30
-    GrowChance: 0.55
+    AvgBlobSize: 3300
+    BlobSizeJitter: 230
+    MinBlobCount: 30
+    MaxBlobCount: 60
+    GrowChance: 0.7
     SmoothPasses: 1
   Lichtenberg:
-    OriginArea: 2
-    GrowthAimArea: 3
+    OriginArea: 0
+    GrowthAimArea: 0
     OriginWeights:
       EdgeWeight: 0.15
       InteriorWeight: 0.6
@@ -60,26 +61,26 @@ MonoBehaviour:
       InteriorMarginPercent: 0.05
       InteriorMinMargin: 2
     GrowthAimWeights:
-      EdgeWeight: 0.1
+      EdgeWeight: 0.15
       InteriorWeight: 0.6
-      AnywhereWeight: 0.3
+      AnywhereWeight: 0.25
       InteriorMarginPercent: 0.05
       InteriorMinMargin: 2
-    UseEdgePairPresets: 0
+    UseEdgePairPresets: 1
     EdgePairMode: 3
-    MinPathCount: 20
-    MaxPathCount: 30
-    CellsPerPath: 900
-    StepBudgetScale: 4
-    MaxActiveWalkers: 25
-    BranchSpawnChance: 0.7
+    MinPathCount: 4
+    MaxPathCount: 16
+    CellsPerPath: 180
+    StepBudgetScale: 1.8
+    MaxActiveWalkers: 14
+    BranchSpawnChance: 0.18
     GoalGrowthBias: 0.72
-    WidenPasses: 1
+    WidenPasses: 0
     PreferUnusedCells: 1
     AllowReuseIfStuck: 1
-    HeatRepelStrength: 18
-    HeatRepelRadius: 4
-    HeatAdd: 3
+    HeatRepelStrength: 2
+    HeatRepelRadius: 1
+    HeatAdd: 5
     HeatFalloff: 2
     RepelPenaltyFromExisting: 1
-    ExistingCellPenalty: 6
+    ExistingCellPenalty: 8
