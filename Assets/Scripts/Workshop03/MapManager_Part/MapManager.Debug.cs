@@ -1,0 +1,144 @@
+using System.Collections.Generic;
+using UnityEngine;
+
+
+namespace AI_Workshop03
+{
+    // MapManager.Debug.cs        -   Partial class to hold map rendering related methods
+    public partial class MapManager
+    {
+
+
+        #region Properties - Debug Options
+
+
+        [Header("Debug: Seed HUD")]
+        [SerializeField] private bool _showSeedHud = true;
+        [SerializeField] private TMPro.TextMeshProUGUI _seedHudLabel;
+        [SerializeField] private string _seedHudPrefix = "Seed: ";
+
+        [Header("Debug: Generation")]
+        [SerializeField] private bool _dumpFocusWeights = true;
+        [SerializeField] private bool _dumpFocusWeightsVerbose = false;
+
+        /*
+        [Header("Debug: Generation Attempts")]
+        [SerializeField] private bool _logGenAttempts = true;
+        [SerializeField] private bool _logGenAttemptFailures = true;
+        [SerializeField] private bool _logPerTerrainSummary = true;
+        [SerializeField] private bool _logObstacleBudgetHits = true;
+        */
+
+        [Header("Debug: A* Costs Overlay")]
+        [SerializeField] private bool _showDebugCosts = true;
+        [SerializeField] private TMPro.TextMeshPro _costLabelPrefab;
+        [SerializeField] private Transform _costLabelRoot;
+        [SerializeField] private float _costLabelOffsetY = 0.05f;
+
+
+        private TMPro.TextMeshPro[] _costLabels;
+        private readonly List<int> _costLabelsTouched = new();
+
+
+        #endregion
+
+
+
+
+
+        private void UpdateSeedHud()
+        {
+            if (!_showSeedHud) return;
+            if (_seedHudLabel == null) return;
+
+            string mode = (_seed == 0) ? " (random)" : "";
+            _seedHudLabel.text = $"{_seedHudPrefix}{_lastGeneratedSeed}{mode}";
+        }
+
+
+        public void SetDebugCosts(int index, int g, int h, int f)
+        {
+            if (!_showDebugCosts) return;
+            if (!IsValidCell(index)) return;
+            if (_costLabelPrefab == null || _costLabelRoot == null) return;
+
+            if (_costLabels == null || _costLabels.Length != _cellCount)
+                _costLabels = new TMPro.TextMeshPro[_cellCount];
+
+            var label = _costLabels[index];
+            if (label == null)
+            {
+                label = Instantiate(_costLabelPrefab, _costLabelRoot);
+                label.alignment = TMPro.TextAlignmentOptions.Center;
+                _costLabels[index] = label;
+            }
+
+            if (!label.gameObject.activeSelf)
+            {
+                label.gameObject.SetActive(true);
+                _costLabelsTouched.Add(index);
+            }
+
+            label.transform.position = IndexToWorldCenterXZ(index, _costLabelOffsetY);
+
+            // show approx tiles step cost by dividing by 10. Layout: g and h small, f big. Format to one decimal place
+            label.text = $"<size=60%>G{g / 10f:0.0} H{h / 10f:0.0}</size>\n<size=100%><b>F{f / 10f:0.0}</b></size>";
+        }
+
+        public void ClearDebugCostsTouched()
+        {
+            if (_costLabelsTouched.Count == 0) return;
+
+            for (int i = 0; i < _costLabelsTouched.Count; i++)
+            {
+                int index = _costLabelsTouched[i];
+                var label = _costLabels?[index];
+                if (label != null) label.gameObject.SetActive(false);
+            }
+
+            _costLabelsTouched.Clear();
+        }
+
+
+
+
+
+#if UNITY_EDITOR
+        private void OnValidate() => ValidateGridSize();
+
+        [ContextMenu("Debug/Corner Color Test")]
+        private void DebugCornerColorTest()
+        {
+            if (_cellCount <= 0) return;
+
+            // Paint corners WITHOUT checker shading and WITHOUT skipping obstacles
+            PaintCell(CoordToIndex(0, 0), new Color32(255, 0, 0, 255), shadeLikeGrid: false, skipIfObstacle: false);                            // (0,0) red
+            PaintCell(CoordToIndex(_width - 1, 0), new Color32(0, 255, 0, 255), shadeLikeGrid: false, skipIfObstacle: false);                   // (w-1,0) green
+            PaintCell(CoordToIndex(0, _height - 1), new Color32(0, 0, 255, 255), shadeLikeGrid: false, skipIfObstacle: false);                  // (0,h-1) blue
+            PaintCell(CoordToIndex(_width - 1, _height - 1), new Color32(255, 255, 255, 255), shadeLikeGrid: false, skipIfObstacle: false);     // (w-1,h-1) white
+
+            _textureDirty = true;
+            FlushTexture();
+        }
+
+
+        [ContextMenu("Seed/Copy LastGeneratedSeed -> Seed")]
+        private void CopyLastSeedToSeed()
+        {
+            _seed = _lastGeneratedSeed;
+            Debug.Log($"[MapManager] Copied last seed {_lastGeneratedSeed} into _seed.");
+        }
+
+
+        [ContextMenu("Seed/Copy LastGeneratedSeed -> Clipboard")]
+        private void CopyLastSeedToClipboard()
+        {
+            UnityEditor.EditorGUIUtility.systemCopyBuffer = _lastGeneratedSeed.ToString();
+            Debug.Log($"[MapManager] Copied seed {_lastGeneratedSeed} to clipboard.");
+        }
+
+#endif
+
+    }
+
+}

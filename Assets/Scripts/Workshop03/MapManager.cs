@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using UnityEngine;
 
 
@@ -7,7 +6,7 @@ namespace AI_Workshop03
 {
 
     // Version2 of BoardManager    -> MapManager
-    public class MapManager : MonoBehaviour
+    public partial class MapManager : MonoBehaviour
     {
 
         [Header("Game Camera Settings")]
@@ -23,7 +22,6 @@ namespace AI_Workshop03
         [SerializeField] private bool _flipTextureX = true;
         [SerializeField] private bool _flipTextureY = true;
 
-        private Color32[] _texturePixels;
 
         [Header("Map Generation Settings")]
         [SerializeField] private int _seed = 0;
@@ -44,31 +42,6 @@ namespace AI_Workshop03
         [SerializeField] private Transform _obstacleRoot;
         private GameObject[] _obstacleInstances;
 
-        [Header("Debug: Seed HUD")]
-        [SerializeField] private bool _showSeedHud = true;
-        [SerializeField] private TMPro.TextMeshProUGUI _seedHudLabel;
-        [SerializeField] private string _seedHudPrefix = "Seed: ";
-
-        [Header("Debug: Generation")]
-        [SerializeField] private bool _dumpFocusWeights = true; 
-        [SerializeField] private bool _dumpFocusWeightsVerbose = false;
-
-        /*
-        [Header("Debug: Generation Attempts")]
-        [SerializeField] private bool _logGenAttempts = true;
-        [SerializeField] private bool _logGenAttemptFailures = true;
-        [SerializeField] private bool _logPerTerrainSummary = true;
-        [SerializeField] private bool _logObstacleBudgetHits = true;
-        */
-
-        [Header("Debug: A* Costs Overlay")]
-        [SerializeField] private bool _showDebugCosts = true;
-        [SerializeField] private TMPro.TextMeshPro _costLabelPrefab;
-        [SerializeField] private Transform _costLabelRoot;
-        [SerializeField] private float _costLabelOffsetY = 0.05f;
-
-        private TMPro.TextMeshPro[] _costLabels;
-        private readonly List<int> _costLabelsTouched = new();
 
         // Accessability Data
         private int[] _bfsQueue;
@@ -76,25 +49,6 @@ namespace AI_Workshop03
         private int _reachStampId;
 
 
-        // NOTE: In the task it explicitly mentions a Node[,] array.
-        // But I represent nodes as per-cell data in 1D arrays indices in arrays rather than Node[,]
-        // and then use the cells coordinates as its index value to match between all arrays 
-        // I had a feeling it would be faster to be able to just access the parts of data that I needed at any time
-
-        // Grid Data
-        private int _cellCount;
-        private bool[] _protected;  //look into storing as bitArray       // if I in the future want the rng ExpandRandom methods to ignore certain tiles, (start/goal, maybe a border ring) that must never be selected:   if (_protected != null && _protected[i]) continue;
-        private bool[] _blocked;
-        private byte[] _terrainKind;
-        private int[] _terrainCost;
-        private int _minTerrainCost = 10;
-
-        // Grid Visualization
-        private Color32[] _baseCellColors;
-        private Color32[] _cellColors;
-        private Texture2D _gridTexture;
-        private bool _textureDirty;
-        private byte[] _lastPaintLayerId;
 
         [Header("Colors")]
         [SerializeField]
@@ -150,172 +104,9 @@ namespace AI_Workshop03
         }
 
 
-        #region Public API
-
-
-        public void GenerateNewGameBoard()
-        {
-            ValidateGridSize();
-
-            _cellCount = _width * _height;
-
-            _blocked = new bool[_cellCount];
-            _terrainKind = new byte[_cellCount];
-            _terrainCost = new int[_cellCount];
-            _baseCellColors = new Color32[_cellCount];
-            _cellColors = new Color32[_cellCount];
-            _lastPaintLayerId = new byte[_cellCount];
-
-            int baseSeed  = (_seed != 0) ? _seed : Environment.TickCount;   // if seed is 0 use random seed
-            int genSeed   = baseSeed;                               // main generation randomness seed
-            int orderSeed = baseSeed ^ unchecked((int)0x73856093);  // terrain paint ordering randomness (rarity shuffle), salted seed
-            int goalSeed  = baseSeed ^ unchecked((int)0x9E3779B9);  // goal picking randomness, salted seed
-
-            _lastGeneratedSeed = baseSeed;
-            Debug.Log($"[MapManager] Generated map with seed={baseSeed} (genSeed={genSeed}) (orderSeed={orderSeed})");
-            UpdateSeedHud();
-
-            _goalRng = new System.Random(goalSeed);
-
-            // Initialize all cells as walkable with default terrain cost
-            for (int i = 0; i < _cellCount; i++)
-            {
-                _blocked[i] = false;
-                _terrainCost[i] = 10;
-                _baseCellColors[i] = _walkableColor;
-
-                _lastPaintLayerId[i] = 0;
-                _terrainKind[i] = (byte)TerrainID.Land;
-            }
-
-
-            // Setup the Debug
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
-            _generator.Debug_DumpFocusWeights = _dumpFocusWeights;
-            _generator.Debug_DumpFocusWeightsVerbose = _dumpFocusWeightsVerbose;
-#else
-            _generator.Debug_DumpFocusWeights = false;
-            _generator.Debug_DumpFocusWeightsVerbose = false;
-#endif
-
-
-            // Call the BoardGenerator to set up the game 
-            _generator.Generate(
-                _width,
-                _height,
-                _blocked,               // if true blocks all movement over this tile
-                _terrainKind,           // what kind of terrain type this tile is, id: 0 = basic/land   (Land/Liquid/etc)
-                _terrainCost,           // cost modifier of moving over this tile
-                _baseCellColors,        // base colors before any external modifiers
-                _lastPaintLayerId,      // what TerrainData affect this, layer id: 0 = base 
-                _walkableColor,         // base color before any terrain modifier
-                10,                     // base cost before any terrain modifier
-                genSeed,                // seed (0 means random)
-                orderSeed,              // terrain paint ordering randomness (rarity shuffle)
-                _terrainData,           // TerrainData[]
-                _maxGenerateAttempts,   // limit for map generator
-                _minUnblockedPercent,   // ratio of allowd un-blocked to blocked tiles 
-                _minReachablePercent,   // how much walkable ground is required to be connected when BuildReachableFrom
-                BuildReachableFrom      // Func<int,int> reachable count from start
-            );
-
-
-
-            RecomputeMinTerrainCost();  // after terrain costs are set compute minimum traversal cost possible on this map
-
-            _gridTexture = new Texture2D(_width, _height, TextureFormat.RGBA32, false);
-            _gridTexture.filterMode = FilterMode.Point;
-            _gridTexture.wrapMode = TextureWrapMode.Clamp;
-
-            RebuildCellColorsFromBase();
-            FlushTexture();
-
-            // Scale plane to match grid world size (X = width, Z = height)
-            _boardRenderer.transform.localScale = new Vector3(_width / UNITY_PLANE_SIZE, 1f, _height / UNITY_PLANE_SIZE);
-            // Center = world coords can run 0,0
-            _boardRenderer.transform.position = new Vector3(_width * 0.5f, 0f, _height * 0.5f);   // Center the quad, works in XZ plane
-            _boardRenderer.transform.rotation = Quaternion.identity;
-
-
-            var mat = _boardRenderer.material;
-
-            // set mainTexture (should cover multiple shaders)
-            mat.mainTexture = _gridTexture;
-
-            // set whichever property the shader actually uses
-            if (mat.HasProperty("_BaseMap")) mat.SetTexture("_BaseMap", _gridTexture);   // URP
-            if (mat.HasProperty("_MainTex")) mat.SetTexture("_MainTex", _gridTexture);   // Built-in
-
-            if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", Color.white);
-            if (mat.HasProperty("_Color")) mat.SetColor("_Color", Color.white);
-
-
-
-
-            // Temp placeholder location!
-            RebuildObstacleCubes();
-
-
-
-
-            FitCameraOrthoTopDown();
-        }
-
-
-        // Public version with exception on out of bounds
-        public int CoordToIndex(int x, int y)
-        {
-            if (!TryCoordToIndex(x, y, out int index))
-                throw new ArgumentOutOfRangeException();
-            return index;
-        }
-
-        // Safe version with bounds checking, use when not sure coordinates are valid
-        public bool TryCoordToIndex(int x, int y, out int index)
-        {
-            if ((uint)x >= (uint)_width || (uint)y >= (uint)_height) { index = -1; return false; }
-            index = x + y * _width;
-            return true;
-        }
-
-        public void IndexToXY(int index, out int x, out int y)
-        {
-            x = index % _width;
-            y = index / _width;
-        }
-
-        public Vector3 IndexToWorldCenterXZ(int index, float yOffset = 0f)
-        {
-            IndexToXY(index, out int x, out int z);
-            return new Vector3(x + 0.5f, yOffset, z + 0.5f);
-        }
-
-
-        #endregion
-
 
 
         #region Cell Data Getters
-
-        // Checks if cell coordinates or index are within bounds
-        public bool IsValidCell(int x, int y) => (uint)x < (uint)_width && (uint)y < (uint)_height;
-        public bool IsValidCell(int index) => (uint)index < (uint)_cellCount;
-
-
-        // check if cell is walkable, used for core loops, eg. pathfinding 
-        public bool GetWalkable(int index)
-        {
-            if (!IsValidCell(index)) throw new ArgumentOutOfRangeException(nameof(index));
-            return !_blocked[index];
-        }
-
-        // check terrain cost, used for core loops, eg. pathfinding 
-        public int GetTerrainCost(int index)
-        {
-            if (!IsValidCell(index)) throw new ArgumentOutOfRangeException(nameof(index));
-            return _terrainCost[index];
-        }
-
 
         // this was a later addon to match diagonal bool option in the A*, keept the old signature below for other callers
         public int BuildReachableFrom(int startIndex) =>
@@ -444,162 +235,6 @@ namespace AI_Workshop03
             return goalIndex != -1;
         }
 
-        #endregion
-
-
-
-        #region Cell Data Setter
-
-        // need to look into if this one is stillusefull or should be changed...
-        public void SetWalkableStatus(int index, bool isWalkable = true)
-        {
-            if (!IsValidCell(index)) throw new ArgumentOutOfRangeException(nameof(index));
-
-            _blocked[index] = !isWalkable;              // blocked is the inverse of walkable, so need to register the opposit here to follow th name logic
-
-            if (isWalkable)
-            {
-                _lastPaintLayerId[index] = 0;
-                _terrainKind[index] = (byte)TerrainID.Land;
-                _terrainCost[index] = 10;
-                _baseCellColors[index] = _walkableColor;
-            }
-            else
-            {
-                _lastPaintLayerId[index] = 0;
-                _terrainKind[index] = (byte)TerrainID.Land;
-                _terrainCost[index] = 0;
-                _baseCellColors[index] = _obstacleColor;
-            }
-
-            IndexToXY(index, out int coordX, out int coordY);
-            bool odd = ((coordX + coordY) & 1) == 1;    // for checkerboard color helper
-            _cellColors[index] = ApplyGridShading(_baseCellColors[index], odd);
-
-            _textureDirty = true;
-        }
-
-        public void SetTerrainCost(int index, int terrainCost)
-        {
-            if (!IsValidCell(index)) throw new ArgumentOutOfRangeException(nameof(index));
-            _terrainCost[index] = terrainCost;
-        }
-
-        public void SetCellData(int index, bool blocked, int terrainCost)
-        {
-            if (!IsValidCell(index)) throw new ArgumentOutOfRangeException(nameof(index));
-            _blocked[index] = blocked;
-            _terrainCost[index] = terrainCost;
-        }
-
-        public void PaintCell(int index, Color32 color, bool shadeLikeGrid = true, bool skipIfObstacle = true)
-        {
-            if (!IsValidCell(index)) throw new ArgumentOutOfRangeException(nameof(index));
-            if (skipIfObstacle && _blocked[index]) return;
-
-            if (shadeLikeGrid)
-            {
-                IndexToXY(index, out int coordX, out int coordY);
-                bool odd = ((coordX + coordY) & 1) == 1;
-                _cellColors[index] = ApplyGridShading(color, odd);
-            }
-            else
-            {
-                _cellColors[index] = color;
-            }
-
-            _textureDirty = true;
-        }
-
-        public void PaintMultipleCells(ReadOnlySpan<int> indices, Color32 color, bool shadeLikeGrid = true, bool skipIfObstacle = true)
-        {
-            for (int i = 0; i < indices.Length; i++)
-                PaintCell(indices[i], color, shadeLikeGrid, skipIfObstacle);
-        }
-
-        public void PaintCellTint(int index, Color32 overlayColor, float strength01 = 0.35f, bool shadeLikeGrid = true, bool skipIfObstacle = true)
-        {
-            if (!IsValidCell(index)) throw new ArgumentOutOfRangeException(nameof(index));
-            if (skipIfObstacle && _blocked[index]) return; 
-
-            strength01 = Mathf.Clamp01(strength01); 
-
-            Color32 basecolor = _cellColors[index];
-            Color32 overlay = overlayColor;
-
-            if(shadeLikeGrid)
-            {
-                IndexToXY(index, out int x, out int y);
-                bool odd = ((x + y) & 1) == 1; 
-                overlay = ApplyGridShading(overlayColor, odd);
-            }
-
-            _cellColors[index] = LerpColor32(basecolor, overlay, strength01); 
-            _textureDirty = true;      
-        }
-
-        public void PaintMultipleCellTints(ReadOnlySpan<int> indices, Color32 overlayColor, float strength01 = 0.35f, bool shadeLikeGrid = true, bool skipIfObstacle = true)
-        {
-            for (int i = 0; i < indices.Length; i++)
-                PaintCellTint(indices[i], overlayColor, strength01, shadeLikeGrid, skipIfObstacle);
-        }
-
-        public void ResetColorsToBase()
-        {
-            RebuildCellColorsFromBase();
-            _textureDirty = true;
-
-        }
-
-        public void FlushTexture()
-        {
-            _textureDirty = false;
-            RefreshTexture();
-        }
-
-        public void SetDebugCosts(int index, int g, int h, int f)
-        {
-            if (!_showDebugCosts) return;
-            if (!IsValidCell(index)) return;
-            if (_costLabelPrefab == null || _costLabelRoot == null) return;
-
-            if (_costLabels == null || _costLabels.Length != _cellCount)
-                _costLabels = new TMPro.TextMeshPro[_cellCount];
-
-            var label = _costLabels[index];
-            if (label == null)
-            {
-                label = Instantiate(_costLabelPrefab, _costLabelRoot);
-                label.alignment = TMPro.TextAlignmentOptions.Center;
-                _costLabels[index] = label;
-            }
-
-            if (!label.gameObject.activeSelf)
-            {
-                label.gameObject.SetActive(true);
-                _costLabelsTouched.Add(index);
-            }
-
-            label.transform.position = IndexToWorldCenterXZ(index, _costLabelOffsetY);
-
-            // show approx tiles step cost by dividing by 10. Layout: g and h small, f big. Format to one decimal place
-            label.text = $"<size=60%>G{g / 10f:0.0} H{h / 10f:0.0}</size>\n<size=100%><b>F{f / 10f:0.0}</b></size>";
-        }
-
-        public void ClearDebugCostsTouched()
-        {
-            if (_costLabelsTouched.Count == 0) return;
-
-            for (int i = 0; i < _costLabelsTouched.Count; i++)
-            {
-                int index = _costLabelsTouched[i];
-                var label = _costLabels?[index];
-                if (label != null) label.gameObject.SetActive(false);
-            }
-
-            _costLabelsTouched.Clear();
-        }
-
 
         #endregion
 
@@ -607,25 +242,6 @@ namespace AI_Workshop03
 
         #region Internal Helpers
         
-        private void RecomputeMinTerrainCost()
-        {
-            int minCost = int.MaxValue;
-
-            for (int i = 0; i < _cellCount; i++)
-            {
-                if (_blocked[i]) continue;
-
-                if (_terrainCost[i] < minCost)
-                    minCost = _terrainCost[i];
-            }
-
-            if (minCost == int.MaxValue) minCost = 10; // default if no walkable cells
-            if (minCost < 1) minCost = 1;  // avoid zero cost
-
-            _minTerrainCost = minCost;
-        }
-
-
         private void EnsureReachBuffers()
         {
             if (_bfsQueue == null || _bfsQueue.Length != _cellCount)
@@ -633,55 +249,6 @@ namespace AI_Workshop03
 
             if (_reachStamp == null || _reachStamp.Length != _cellCount)
                 _reachStamp = new int[_cellCount];
-        }
-
-
-        private void RefreshTexture()
-        {
-            if (_gridTexture == null) return;
-
-            // fast path if visuals don't need to be fliped 
-            if (!_flipTextureX && !_flipTextureY)
-            {
-                _gridTexture.SetPixels32(_cellColors);
-                _gridTexture.Apply(false);
-                return;
-            }
-
-            // when switching from XY Quad to a XZ Plane visuals flipped. The Plane’s UV orientation may not match the grid row/column order, fix is below.
-            // Use DebugCornerColorTest to see what _flipTextureX/Y needs to be on.
-
-            if (_texturePixels == null || _texturePixels.Length != _cellCount)
-                _texturePixels = new Color32[_cellCount];
-
-            for (int y = 0; y < _height; y++)
-            {
-                int srcRowBase = y * _width;
-
-                int dstRowY = _flipTextureY ? (_height -1 -y) : y;
-                int dstRowBase = dstRowY * _width;
-
-                if (!_flipTextureX)
-                {
-                    // if only Y needed to be flipped 
-                    Array.Copy(_cellColors, srcRowBase, _texturePixels, dstRowBase, _width);
-                }
-                else
-                {
-                    for (int x = 0; x < _width; x++)
-                    {
-                        int srcIndex = srcRowBase + x;
-
-                        int dstX =  _width -1 -x;
-                        int dstIndex = dstRowBase + dstX;
-                        
-                        _texturePixels[dstIndex] = _cellColors[srcIndex];
-                    }
-                }
-            }
-
-            _gridTexture.SetPixels32(_texturePixels);
-            _gridTexture.Apply(false); 
         }
 
 
@@ -729,67 +296,6 @@ namespace AI_Workshop03
         }
 
 
-        private void RebuildCellColorsFromBase()
-        {
-            for (int i = 0; i < _cellCount; i++)
-            {
-                IndexToXY(i, out int x, out int y);
-                bool odd = ((x + y) & 1) == 1;
-                _cellColors[i] = ApplyGridShading(_baseCellColors[i], odd);
-            }
-
-            _textureDirty = true;
-        }
-
-        private static Color32 ApplyGridShading(Color32 c, bool odd)
-        {
-            // Small change so it’s visible but not ugly
-            const int delta = 12;
-
-            int d = odd ? +delta : -delta;
-
-            byte r = (byte)Mathf.Clamp(c.r + d, 0, 255);
-            byte g = (byte)Mathf.Clamp(c.g + d, 0, 255);
-            byte b = (byte)Mathf.Clamp(c.b + d, 0, 255);
-
-            return new Color32(r, g, b, c.a);
-        }
-
-        private static Color32 LerpColor32(Color32 a, Color32 b, float t)
-        {
-            t = Mathf.Clamp01(t);
-            int ti = Mathf.RoundToInt(t * 255f);
-            int inv = 255 - ti;
-
-            byte r = (byte)((a.r * inv + b.r * ti + 127) / 255);
-            byte g = (byte)((a.g * inv + b.g * ti + 127) / 255);
-            byte bl = (byte)((a.b * inv + b.b * ti + 127) / 255);
-
-            // should keep fully opaque for an opaque material
-            return new Color32(r, g, bl, 255);
-        }
-
-
-
-        private void ValidateGridSize()
-        {
-            if (_width <= 0) throw new ArgumentOutOfRangeException(nameof(_width));
-            if (_height <= 0) throw new ArgumentOutOfRangeException(nameof(_height));
-
-            long count = (long)_width * _height;
-            if (count > int.MaxValue)
-                throw new OverflowException("Grid too large for int indexing.");
-        }
-
-        private void UpdateSeedHud()
-        {
-            if (!_showSeedHud) return;
-            if (_seedHudLabel == null) return;
-
-            string mode = (_seed == 0) ? " (random)" : "";
-            _seedHudLabel.text = $"{_seedHudPrefix}{_lastGeneratedSeed}{mode}";
-        }
-
 
         private void FitCameraOrthoTopDown()
         {
@@ -822,43 +328,6 @@ namespace AI_Workshop03
 
 
 
-
-
-#if UNITY_EDITOR
-        private void OnValidate() => ValidateGridSize();
-
-        [ContextMenu("Debug/Corner Color Test")]
-        private void DebugCornerColorTest()
-        {
-            if (_cellCount <= 0) return;
-
-            // Paint corners WITHOUT checker shading and WITHOUT skipping obstacles
-            PaintCell(CoordToIndex(0, 0), new Color32(255, 0, 0, 255), shadeLikeGrid: false, skipIfObstacle: false);                            // (0,0) red
-            PaintCell(CoordToIndex(_width - 1, 0), new Color32(0, 255, 0, 255), shadeLikeGrid: false, skipIfObstacle: false);                   // (w-1,0) green
-            PaintCell(CoordToIndex(0, _height - 1), new Color32(0, 0, 255, 255), shadeLikeGrid: false, skipIfObstacle: false);                  // (0,h-1) blue
-            PaintCell(CoordToIndex(_width - 1, _height - 1), new Color32(255, 255, 255, 255), shadeLikeGrid: false, skipIfObstacle: false);     // (w-1,h-1) white
-
-            _textureDirty = true;
-            FlushTexture();
-        }
-
-
-        [ContextMenu("Seed/Copy LastGeneratedSeed -> Seed")]
-        private void CopyLastSeedToSeed()
-        {
-            _seed = _lastGeneratedSeed;
-            Debug.Log($"[MapManager] Copied last seed {_lastGeneratedSeed} into _seed.");
-        }
-
-
-        [ContextMenu("Seed/Copy LastGeneratedSeed -> Clipboard")]
-        private void CopyLastSeedToClipboard()
-        {
-            UnityEditor.EditorGUIUtility.systemCopyBuffer = _lastGeneratedSeed.ToString();
-            Debug.Log($"[MapManager] Copied seed {_lastGeneratedSeed} to clipboard.");
-        }
-
-#endif
 
     }
 
