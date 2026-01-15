@@ -4,12 +4,12 @@ using UnityEngine;
 
 namespace AI_Workshop03
 {
-    // MapManager.Debug.cs        -   Partial class to hold map rendering related methods
+    // MapManager.Debug.cs        -   Purpose: seed HUD + cost overlay + editor context menus
     public partial class MapManager
     {
 
 
-        #region Properties - Debug Options
+        #region Fields - Debug Options
 
 
         [Header("Debug: Seed HUD")]
@@ -41,8 +41,6 @@ namespace AI_Workshop03
 
 
         #endregion
-
-
 
 
 
@@ -85,6 +83,7 @@ namespace AI_Workshop03
             label.text = $"<size=60%>G{g / 10f:0.0} H{h / 10f:0.0}</size>\n<size=100%><b>F{f / 10f:0.0}</b></size>";
         }
 
+
         public void ClearDebugCostsTouched()
         {
             if (_costLabelsTouched.Count == 0) return;
@@ -98,7 +97,6 @@ namespace AI_Workshop03
 
             _costLabelsTouched.Clear();
         }
-
 
 
 

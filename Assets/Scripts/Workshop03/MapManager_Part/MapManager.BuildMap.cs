@@ -6,7 +6,7 @@ using System;
 namespace AI_Workshop03
 {
 
-    // MapManager.Generation.cs         -   Partial class to hold map generation related methods
+    // MapManager.BuildMap.cs         -   Purpose: map creation + calling generator + map init / reseed
     public partial class MapManager
     {
 
@@ -18,7 +18,7 @@ namespace AI_Workshop03
             _cellCount = _width * _height;
 
             _blocked = new bool[_cellCount];
-            _terrainKind = new byte[_cellCount];
+            _terrainKey = new byte[_cellCount];
             _terrainCost = new int[_cellCount];
             _baseCellColors = new Color32[_cellCount];
             _cellColors = new Color32[_cellCount];
@@ -43,7 +43,7 @@ namespace AI_Workshop03
                 _baseCellColors[i] = _walkableColor;
 
                 _lastPaintLayerId[i] = 0;
-                _terrainKind[i] = (byte)TerrainID.Land;
+                _terrainKey[i] = (byte)TerrainID.Land;
             }
 
 
@@ -62,7 +62,7 @@ namespace AI_Workshop03
                 _width,
                 _height,
                 _blocked,               // if true blocks all movement over this tile
-                _terrainKind,           // what kind of terrain type this tile is, id: 0 = basic/land   (Land/Liquid/etc)
+                _terrainKey,            // stable terrain key (byte), survives multiple generations
                 _terrainCost,           // cost modifier of moving over this tile
                 _baseCellColors,        // base colors before any external modifiers
                 _lastPaintLayerId,      // what TerrainData affect this, layer id: 0 = base 
@@ -151,6 +151,34 @@ namespace AI_Workshop03
                 throw new OverflowException("Grid too large for int indexing.");
         }
 
+
+
+
+
+        private void FitCameraOrthoTopDown()
+        {
+            if (_mainCamera == null) _mainCamera = Camera.main;
+            if (_mainCamera == null) return;
+
+            _mainCamera.orthographic = true;
+
+            // Center of the board in world space (Quad centered at its transform)
+            Vector3 center = _boardRenderer.transform.position;
+
+            // Place camera above the board (a top down XZ plane view)
+            _mainCamera.transform.rotation = Quaternion.Euler(90f, 0f, 0f);
+            _mainCamera.transform.position = center + new Vector3(0f, 20f, 0f);
+
+            // Fit whole board in view
+            float halfH = _height * 0.5f;       // Z-size half
+            float halfW = _width * 0.5f;        // X-size half
+
+            float aspect = _mainCamera.aspect; // width / height
+            float sizeToFitHeight = halfH;
+            float sizeToFitWidth = halfW / aspect;
+
+            _mainCamera.orthographicSize = Mathf.Max(sizeToFitHeight, sizeToFitWidth) + _cameraPadding;
+        }
 
 
     }

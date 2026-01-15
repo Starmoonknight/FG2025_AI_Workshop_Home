@@ -1,0 +1,138 @@
+using System.Collections.Generic;
+using UnityEngine;
+
+
+namespace AI_Workshop03
+{
+
+    // MapDataGenerator.Static.cs         -   Purpose:  Static mode generation and expansion internals    
+    public sealed partial class MapDataGenerator
+    {
+        private void ExpandRandomStatic(
+            TerrainTypeData terrain,
+            List<int> outCells)
+        {
+            outCells.Clear();
+
+            float coverage = Mathf.Clamp01(terrain.CoveragePercent);
+            if (coverage <= 0) return;
+
+            EnsureGenBuffers();
+
+            ExpansionAreaFocus placement = terrain.Static.PlacementArea;
+            TerrainTypeData.AreaFocusWeights weights = terrain.Static.PlacementWeights;
+            int margin = ComputeInteriorMarginCells(in weights);
+
+            float clusterBias = Mathf.Clamp01(terrain.Static.ClusterBias);
+
+            ExpansionAreaFocus poolFilter =
+                (placement == ExpansionAreaFocus.Weighted) ? ExpansionAreaFocus.Anywhere : placement;
+
+            _scratch.temp.Clear();
+            int poolMark = NextMarkId();
+
+
+            for (int i = 0; i < _cellCount; i++)
+            {
+                if (!CanUseCell(terrain, i)) continue;
+                if (!MatchesFocus(i, poolFilter, margin)) continue;
+
+                int pos = _scratch.temp.Count;
+                _scratch.temp.Add(i);
+
+                _scratch.used[i] = poolMark;
+                _scratch.poolPos[i] = pos;
+            }
+
+            int eligible = _scratch.temp.Count;
+            if (eligible == 0) return;
+
+            int targetTotal = Mathf.RoundToInt(coverage * _cellCount);
+            int target = Mathf.Min(targetTotal, eligible);
+            if (target <= 0) return;
+
+
+            // Selection picking eligible candidates
+
+            if (clusterBias <= 0f)
+            {
+
+                if (placement == ExpansionAreaFocus.Weighted)
+                {
+                    // for weighted search of viable cells 
+                    for (int k = 0; k < target; k++)
+                    {
+                        ExpansionAreaFocus pickFocus = RollWeightedFocus(in weights, _rng);
+
+                        int focusTries = Mathf.Clamp(_scratch.temp.Count / 8, 8, 64);
+                        if (!TryPickFromPool_ByFocus(pickFocus, margin, focusTries, out int pickedIdx))
+                            break;
+
+                        RemoveFromPool(pickedIdx, poolMark);
+                        outCells.Add(pickedIdx);
+                    }
+                    return;
+                }
+
+                // non-weighted uniform pick by Partial Fisher-Yates: pick 'target' unique cells     // Note to self; look more into Fisher-Yates and Partial Fisher-Yates later
+                for (int k = 0; k < target; k++)
+                {
+                    int swap = _rng.Next(k, eligible);
+                    (_scratch.temp[k], _scratch.temp[swap]) = (_scratch.temp[swap], _scratch.temp[k]);
+                    outCells.Add(_scratch.temp[k]);
+                }
+                return;
+            }
+
+
+            // should scale with map size
+            int loose = Mathf.Max(4, Mathf.RoundToInt(Mathf.Min(_width, _height) * 0.02f));
+            int tight = 2;
+            // higer bias should make the static expansion cluster more into groups 
+            int maxRadius = Mathf.Max(1, Mathf.RoundToInt(Mathf.Lerp(loose, tight, clusterBias)));
+
+            int nearTries = Mathf.Max(8, Mathf.RoundToInt(Mathf.Lerp(8f, 32f, clusterBias)));
+            for (int k = 0; k < target; k++)
+            {
+                if (_scratch.temp.Count == 0) break;
+
+                ExpansionAreaFocus pickFocus =
+                    (placement == ExpansionAreaFocus.Weighted)
+                        ? RollWeightedFocus(in weights, _rng)
+                        : placement;
+
+                int pickedIdx = -1;
+
+                // tries cluster-near pick first inside enforced focus region
+                if (outCells.Count > 0 && _rng.NextDouble() < clusterBias)
+                {
+                    if (TryPickCell_NearExisting(outCells, poolMark, maxRadius, nearTries,
+                            out int near,
+                            focusArea: pickFocus,
+                            interiorMargin: margin))
+                    {
+                        pickedIdx = near;
+                    }
+                }
+
+                // if clustering didn’t pick anything, pick from pool respecting focus
+                if (pickedIdx < 0)
+                {
+                    // the tries = how hard it will try to find a cell that matches focus area from available in pool
+                    int focusTries = Mathf.Clamp(_scratch.temp.Count / 8, 8, 64);
+
+                    if (!TryPickFromPool_ByFocus(pickFocus, margin, focusTries, out pickedIdx))
+                        break; // pool empty or something very wrong
+                }
+
+                RemoveFromPool(pickedIdx, poolMark);
+                outCells.Add(pickedIdx);
+            }
+
+        }
+
+
+
+    }
+
+}

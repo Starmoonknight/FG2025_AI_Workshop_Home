@@ -4,13 +4,13 @@ using UnityEngine;
 
 namespace AI_Workshop03
 {
-    // MapManager.Data.cs               -   Partial class to hold map data related methods
+    // MapManager.Data.cs               -   Purpose: truth arrays + coordinate helpers + getters/setters
     public partial class MapManager
     {
 
 
 
-        #region Properties - Grid Data Fields
+        #region Fields - Grid Data Fields
 
         /* SoA or AoS choice:
         * NOTE: In the task it explicitly mentions a Node[,] array.
@@ -24,16 +24,31 @@ namespace AI_Workshop03
         // Grid Data Fields
         private int _cellCount;             // total number of cells in the grid (_width * _height)
         private bool[] _blocked;            // walkability of each cell
-        private byte[] _terrainKind;        // TerrainDataType of each cell
         private int[] _terrainCost;         // movement cost of each cell, quick lookup for A* pathfinding
         private int _minTerrainCost = 10;   // minimum terrain cost on the map (used for pathfinding heuristic)
         private Color32[] _baseCellColors;  // base color of each cell (before any paint layers)
-        private byte[] _lastPaintLayerId;   // what TerrainData layer last painted this cell, for quick lookup.
+        private byte[] _terrainKey;         // TerrainDataType of each cell          switch meaning to? ->  // stable terrain key (byte), survives multiple generations
+        private byte[] _lastPaintLayerId;   // generation paint layer/order (byte)
 
-        //private ubite[] _TerrainKey; permaner lookup id that would survive over multiple map generations while lastPaintLayerId is per-generation
-        //private bool[] _protected;  //look into storing as bitArray       // if I in the future want the rng ExpandRandom methods to ignore certain tiles, (start/goal, maybe a border ring) that must never be selected:   if (_protected != null && _protected[i]) continue;
+        /*  Additional future fields ideas:
+        *
+        *  private ushort[] _terrainKey; permaner lookup id that would survive over multiple map generations while lastPaintLayerId is per-generation
+        *  private bool[] _protected;  //look into storing as bitArray       // if I in the future want the rng ExpandRandom methods to ignore certain tiles, (start/goal, maybe a border ring) that must never be selected:   if (_protected != null && _protected[i]) continue;
+        *  
+        *  private (int/ushort) clumpId[idx] _clumpIds;   // if I in the future want to group certain tiles into clumps for generation or pathfinding optimizations, a connected-component labeling system
+        *       
+        *       Pipeline idea: during generation, after blocking tiles, run a CCL algorithm to assign clump ids to walkable areas, 
+        *       then use that to quickly reject unreachable areas or optimize pathfinding by first checking if start and goal are in same clump
+        *       
+        *       Pipeline design then would be:
+        *           > Generate Map
+        *           > Compute Reachability
+        *           + Compute Clumps
+        *  
+        */
 
         #endregion
+
 
 
         #region Coordinates conversion
@@ -69,6 +84,7 @@ namespace AI_Workshop03
         #endregion
 
 
+
         #region Cell Getters
 
         // Checks if cell coordinates or index are within bounds
@@ -94,7 +110,8 @@ namespace AI_Workshop03
         #endregion
 
 
-        #region Cell Setters
+
+        #region Cell Setters + paint API
 
 
         // need to look into if this one is stillusefull or should be changed...
@@ -107,14 +124,14 @@ namespace AI_Workshop03
             if (isWalkable)
             {
                 _lastPaintLayerId[index] = 0;
-                _terrainKind[index] = (byte)TerrainID.Land;
+                _terrainKey[index] = (byte)TerrainID.Land;
                 _terrainCost[index] = 10;
                 _baseCellColors[index] = _walkableColor;
             }
             else
             {
                 _lastPaintLayerId[index] = 0;
-                _terrainKind[index] = (byte)TerrainID.Land;
+                _terrainKey[index] = (byte)TerrainID.Land;
                 _terrainCost[index] = 0;
                 _baseCellColors[index] = _obstacleColor;
             }

@@ -4,11 +4,11 @@ using UnityEngine;
 
 namespace AI_Workshop03
 {
-    // MapManager.Renderer.cs               -   Partial class to hold map rendering related methods
+    // MapManager.Renderer.cs               -   Purpose (visual 2D): Texture2D + UV flipping + “upload to material” + grid shading / overlays + dirty flag / uploading
     public partial class MapManager
     {
 
-        #region Properties - Grid Visualization
+        #region Fields - Grid Visualization
 
         private Color32[] _cellColors;
         private Color32[] _texturePixels;
