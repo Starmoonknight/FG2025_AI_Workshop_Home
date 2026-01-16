@@ -1,5 +1,4 @@
 using System;
-using UnityEngine;
 
 
 namespace AI_Workshop03
@@ -16,11 +15,11 @@ namespace AI_Workshop03
 
         private void EnsureReachBuffers()
         {
-            if (_bfsQueue == null || _bfsQueue.Length != _cellCount)
-                _bfsQueue = new int[_cellCount];
+            if (_bfsQueue == null || _bfsQueue.Length != _data.CellCount)
+                _bfsQueue = new int[_data.CellCount];
 
-            if (_reachStamp == null || _reachStamp.Length != _cellCount)
-                _reachStamp = new int[_cellCount];
+            if (_reachStamp == null || _reachStamp.Length != _data.CellCount)
+                _reachStamp = new int[_data.CellCount];
         }
 
 
@@ -31,7 +30,7 @@ namespace AI_Workshop03
         public int BuildReachableFrom(int startIndex, bool allowDiagonals)
         {
             EnsureReachBuffers();
-            if (!IsValidCell(startIndex) || _blocked[startIndex])
+            if (!_data.IsValidCellIndex(startIndex) || _data.IsBlocked[startIndex])
                 return 0;
 
             // Prevent stamp id overflow, rare but possible
@@ -54,7 +53,7 @@ namespace AI_Workshop03
             while (head < tail)
             {
                 int currentIndex = _bfsQueue[head++];
-                IndexToXY(currentIndex, out int coordX, out int coordY);
+                _data.IndexToXY(currentIndex, out int coordX, out int coordY);
 
                 foreach (var (dirX, dirY, _) in Neighbors8)
                 {
@@ -65,8 +64,8 @@ namespace AI_Workshop03
                     if (dirX != 0 && dirY != 0)  // need to change to match A*  // think I changed it but double check later
                     {
                         // Diagonal movement allowed only if at least one side is open
-                        bool sideAOpen = TryCoordToIndex(coordX + dirX, coordY, out int sideIndexA) && !_blocked[sideIndexA];
-                        bool sideBOpen = TryCoordToIndex(coordX, coordY + dirY, out int sideIndexB) && !_blocked[sideIndexB];
+                        bool sideAOpen = _data.TryCoordToIndex(coordX + dirX, coordY, out int sideIndexA) && !_data.IsBlocked[sideIndexA];
+                        bool sideBOpen = _data.TryCoordToIndex(coordX, coordY + dirY, out int sideIndexB) && !_data.IsBlocked[sideIndexB];
 
                         if (!sideAOpen && !sideBOpen)
                             continue;
@@ -80,8 +79,8 @@ namespace AI_Workshop03
 
             void TryEnqueue(int newX, int newY)
             {
-                if (!TryCoordToIndex(newX, newY, out int ni)) return;
-                if (_blocked[ni]) return;
+                if (!_data.TryCoordToIndex(newX, newY, out int ni)) return;
+                if (_data.IsBlocked[ni]) return;
                 if (_reachStamp[ni] == _reachStampId) return;
 
                 _reachStamp[ni] = _reachStampId;
@@ -91,26 +90,14 @@ namespace AI_Workshop03
 
         }
 
-
+        // Visual version that asks renderer to show unreachable areas from the center of the map
         public void BuildVisualReachableFrom(int startIndex, bool allowDiagonals = true)
         {
             BuildReachableFrom(startIndex, allowDiagonals);
-            RebuildCellColorsFromBase();
 
-            for (int i = 0; i < _cellCount; i++)
-            {
-                if (_blocked[i]) continue;
-
-                bool isReachable = (_reachStamp[i] == _reachStampId);
-                if (!isReachable)
-                {
-                    IndexToXY(i, out int x, out int y);
-                    bool odd = ((x + y) & 1) == 1;
-                    _cellColors[i] = ApplyGridShading(_unReachableColor, odd);
-                }
-            }
-
-            _textureDirty = true;
+            // Ask renderer to show unreachable areas using latest reach data
+            if (_renderer2D != null)
+                _renderer2D.ShowUnreachableOverlay(_reachStamp, _reachStampId, _unReachableColor);
         }
 
 
@@ -127,17 +114,17 @@ namespace AI_Workshop03
             int reachableCount = BuildReachableFrom(startIndex, allowDiagonals);
             if (reachableCount <= 1) return false;
 
-            IndexToXY(startIndex, out int startX, out int startY);
+            _data.IndexToXY(startIndex, out int startX, out int startY);
 
             int candidateCount = 0;
 
-            for (int i = 0; i < _cellCount; i++)
+            for (int i = 0; i < _data.CellCount; i++)
             {
-                if (_blocked[i]) continue;                      // skip unwalkable cells
+                if (_data.IsBlocked[i]) continue;                      // skip unwalkable cells
                 if (_reachStamp[i] != _reachStampId) continue;  // if not reachable in current step
                 if (i == startIndex) continue;                  // skip starting cell
 
-                IndexToXY(i, out int cellX, out int cellY);
+                _data.IndexToXY(i, out int cellX, out int cellY);
                 int manhattan = Math.Abs(cellX - startX) + Math.Abs(cellY - startY);
                 if (manhattan < minManhattan) continue;
 

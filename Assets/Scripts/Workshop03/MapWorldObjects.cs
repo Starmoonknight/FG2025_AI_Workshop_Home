@@ -3,32 +3,79 @@ using UnityEngine;
 
 namespace AI_Workshop03
 {
-    // MapManager.WorldObjects.cs        -   Purpose (visual 3D): managing 3D world objects (obstacles, etc)
-    public partial class MapManager
+    public class MapWorldObjects : MonoBehaviour
     {
+        [SerializeField] private MapManager _mapManager;
 
         [Header("3D Obstacle Visuals")]
         [SerializeField] private GameObject _obstacleCubePrefab;
         [SerializeField] private Transform _obstacleRoot;
         private GameObject[] _obstacleInstances;
 
+        private void Awake()
+        {
+            if (_mapManager == null)
+                _mapManager = FindFirstObjectByType<MapManager>();
+        }
+
+        private void OnEnable()
+        {
+            if (_mapManager == null) return;
+
+            _mapManager.OnMapRebuilt += HandleMapRebuilt;
+
+            if (_mapManager.Data != null)
+                HandleMapRebuilt(_mapManager.Data);
+        }
+
+        private void OnDisable()
+        {
+            if (_mapManager != null)
+                _mapManager.OnMapRebuilt -= HandleMapRebuilt;
+        }
+
+        private void HandleMapRebuilt(MapData data)
+        {
+            RebuildObstacleCubes(data);
+        }
 
 
-        private void RebuildObstacleCubes()
+
+        public void RebuildObstacleCubes(MapData data)
         {
             if (_obstacleCubePrefab == null) return;
 
-            if (_obstacleInstances == null || _obstacleInstances.Length != _cellCount)
-                _obstacleInstances = new GameObject[_cellCount];
 
-            for (int i = 0; i < _cellCount; i++)
+            if (_obstacleInstances != null && _obstacleInstances.Length > data.CellCount)
             {
-                if (_blocked[i])
+                for (int i = data.CellCount; i < _obstacleInstances.Length; i++)
+                {
+                    if (_obstacleInstances[i] != null)
+                        Destroy(_obstacleInstances[i]);
+                }
+            }
+
+            if (_obstacleInstances == null || _obstacleInstances.Length != data.CellCount)
+                _obstacleInstances = new GameObject[data.CellCount];
+
+            for (int i = 0; i < data.CellCount; i++)
+            {
+                if (data.IsBlocked[i])
                 {
                     if (_obstacleInstances[i] == null)
                     {
-                        Vector3 pos = IndexToWorldCenterXZ(i, 0.5f);
-                        _obstacleInstances[i] = Instantiate(_obstacleCubePrefab, pos, Quaternion.identity, _obstacleRoot);
+
+
+                        //Vector3 pos = data.IndexToWorldCenterXZ(i, 0.5f);
+                        //_obstacleInstances[i] = Instantiate(_obstacleCubePrefab, pos, Quaternion.identity, _obstacleRoot);
+                        
+                        Vector3 pos = data.IndexToWorldCenterXZ(i, 0.5f);
+                        Transform parent = _obstacleRoot != null ? _obstacleRoot : null;
+                        _obstacleInstances[i] = Instantiate(_obstacleCubePrefab, pos, Quaternion.identity, parent);
+
+
+
+
 
 
                         /*    Need to place the prefabs in the array to follow same idx model as all other data
@@ -74,8 +121,6 @@ namespace AI_Workshop03
          *      - bool TryGetRandomWalkableCell(out int idx)
          *      - byte GetTerrainKind(int idx)
          */
-
-
 
 
 

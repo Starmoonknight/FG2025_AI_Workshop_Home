@@ -10,6 +10,9 @@ namespace AI_Workshop03
     public partial class MapManager : MonoBehaviour
     {
 
+        public event Action<MapData> OnMapRebuilt;
+
+
         [Header("Game Camera Settings")]
         [SerializeField] private Camera _mainCamera;
         [SerializeField] private float _cameraPadding = 1f;
@@ -18,18 +21,30 @@ namespace AI_Workshop03
         [SerializeField] private Renderer _boardRenderer;
         [SerializeField, Min(1)] private int _width = 10;
         [SerializeField, Min(1)] private int _height = 10;
+        [SerializeField, Min(1)] private int _baseTerrainCost = 10;
 
-        [Header("Texture Mapping")]
-        [SerializeField] private bool _flipTextureX = true;
-        [SerializeField] private bool _flipTextureY = true;
-
+        /*
+         * 
+         *   Make a MapGenConfig / MapDefaults class for default settings? 
+         *       
+         *    [Serializable]
+         *    public class MapDefaults
+         *    {
+         *        public int BaseTerrainCost = 10;
+         *        public Color32 WalkableColor = new Color32(60, 140, 60, 255);
+         *        public byte BaseTerrainKey = (byte)TerrainID.Land;
+         *    }
+         *    
+         *    Then have MapManager use _defaults.BaseTerrainCost everywhere
+         *    Scalability architecturewhen more defaults appear?
+        */
 
         [Header("Map Generation Settings")]
         [SerializeField] private int _seed = 0;
-        [SerializeField]  private int _lastGeneratedSeed = 0;
+        [SerializeField] private int _lastGeneratedSeed = 0;
         [SerializeField, Range(0f, 1f)] private float _minUnblockedPercent = 0.5f;
         [SerializeField, Range(0f, 1f)] private float _minReachablePercent = 0.75f;
-        [SerializeField]  private int _maxGenerateAttempts = 50;
+        [SerializeField] private int _maxGenerateAttempts = 50;
 
         private System.Random _goalRng;
 
@@ -38,6 +53,10 @@ namespace AI_Workshop03
 
         private readonly MapDataGenerator _generator = new MapDataGenerator();
 
+
+        [SerializeField] private MapRenderer2D _renderer2D;
+        [SerializeField] private MapWorldObjects _worldObjects;
+        private MapData _data;
 
 
         [Header("Colors")]
@@ -51,9 +70,10 @@ namespace AI_Workshop03
 
         public int Width => _width;
         public int Height => _height;
-        public int CellCount => _cellCount;
+        public int BaseTerrainCost => _baseTerrainCost;
         public int MinTerrainCost => _minTerrainCost;
         public int LastGeneratedSeed => _lastGeneratedSeed;
+        public MapData Data => _data;
 
 
 
@@ -81,16 +101,16 @@ namespace AI_Workshop03
 
         private void Awake()
         {
+            if (_renderer2D == null)
+                _renderer2D = FindFirstObjectByType<MapRenderer2D>();
+
+            if (_worldObjects == null)
+                _worldObjects = FindFirstObjectByType<MapWorldObjects>();
+
+
             GenerateNewGameBoard();
 
             //DebugCornerColorTest(); 
-        }
-
-        private void LateUpdate()
-        {
-            if (!_textureDirty) return;
-            _textureDirty = false;
-            RefreshTexture();
         }
 
 

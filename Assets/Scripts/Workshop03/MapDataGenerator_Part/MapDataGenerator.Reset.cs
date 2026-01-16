@@ -14,7 +14,7 @@ namespace AI_Workshop03
             for (int i = 0; i < _cellCount; i++)
             {
                 _blocked[i] = false;
-                _terrainKey[i] = (byte)TerrainID.Land;
+                _terrainKindIds[i] = _baseTerrainKind;
                 _terrainCost[i] = _baseWalkableCost;
                 _baseColors[i] = _baseWalkableColor;
                 _lastPaintLayerId[i] = 0;
@@ -29,7 +29,7 @@ namespace AI_Workshop03
             {
                 if (_blocked[i]) continue;
 
-                _terrainKey[i] = (byte)TerrainID.Land;
+                _terrainKindIds[i] = _baseTerrainKind;
                 _terrainCost[i] = _baseWalkableCost;
                 _baseColors[i] = _baseWalkableColor;
                 _lastPaintLayerId[i] = 0;

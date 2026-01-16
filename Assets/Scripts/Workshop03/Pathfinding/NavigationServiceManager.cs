@@ -10,35 +10,25 @@ namespace AI_Workshop03
     public class NavigationServiceManager : MonoBehaviour
     {
         [Header("References")]
-        [SerializeField]
-        private MapManager _mapManager;
+        [SerializeField] private MapManager _mapManager;
+        [SerializeField] private MapRenderer2D _mapRenderer2D;
 
         [Header("A* Settings")]
-        [SerializeField]
-        private bool _allowDiagonals = true;
+        [SerializeField] private bool _allowDiagonals = true;
 
         [Tooltip("Delay (seconds) between each current node' selection, for visualization.")]
-        [SerializeField, Min(0f)]
-        private float _searchDelay = 0.4f;
-        [SerializeField, Min(0f)]
-        private float _pathDelay = 0.1f;
+        [SerializeField, Min(0f)] private float _searchDelay = 0.4f;
+        [SerializeField, Min(0f)] private float _pathDelay = 0.1f;
 
 
         [Header("Visualization Colors")]
-        [SerializeField, Range(0,1)]
-        private float _spreadOverlayStrength = 0.35f;
-        [SerializeField, Range(0,1)]
-        private float _pathOverlayStrength = 0.5f;
-        [SerializeField]
-        private Color32 _triedColor = new(185, 0, 255, 255);        // closed,          purple
-        [SerializeField]
-        private Color32 _frontierColor = new(180, 170, 255, 255);   // open (optional), light purple-blue
-        [SerializeField]
-        private Color32 _pathColor = new(6, 225, 25, 255);          // final path,      green
-        [SerializeField]
-        private Color32 _startColor = new(0, 255, 255, 255);        // start cell,      light blue 
-        [SerializeField]
-        private Color32 _goalColor = new(255, 255, 0, 255);         // goal cell,       yellow 
+        [SerializeField, Range(0,1)] private float _spreadOverlayStrength = 0.35f;
+        [SerializeField, Range(0,1)] private float _pathOverlayStrength = 0.5f;
+        [SerializeField] private Color32 _triedColor = new(185, 0, 255, 255);        // closed,          purple
+        [SerializeField] private Color32 _frontierColor = new(180, 170, 255, 255);   // open (optional), light purple-blue
+        [SerializeField] private Color32 _pathColor = new(6, 225, 25, 255);          // final path,      green
+        [SerializeField] private Color32 _startColor = new(0, 255, 255, 255);        // start cell,      light blue 
+        [SerializeField] private Color32 _goalColor = new(255, 255, 0, 255);         // goal cell,       yellow 
 
         // Internal data
         private int _totalCells;    // total number of cells in the grid
@@ -55,7 +45,6 @@ namespace AI_Workshop03
 
         private Coroutine _computeCo; 
         private Coroutine _replayCo;
-
 
         public bool IsPathComputing { get; private set; }
         public bool IsVisualizing { get; private set; }
@@ -86,13 +75,13 @@ namespace AI_Workshop03
 
         private void Awake()
         {
-            if (_mapManager == null) _mapManager = FindFirstObjectByType<MapManager>();
             EnsureCapacity();
         }
 
         private void EnsureCapacity()
         {
-            _totalCells = _mapManager.CellCount;
+            if (_mapManager == null) _mapManager = FindFirstObjectByType<MapManager>();
+            _totalCells = _mapManager.Data.CellCount;
 
             if (_fCost == null  || _fCost.Length  != _totalCells) _fCost  = new int[_totalCells];
             if (_gCost == null  || _gCost.Length  != _totalCells) _gCost  = new int[_totalCells];
@@ -122,7 +111,8 @@ namespace AI_Workshop03
 
         public void StartVisualPathFromCenter(int minManhattan = 20)
         {
-            int startIndex = _mapManager.CoordToIndex(_mapManager.Width / 2, _mapManager.Height / 2);
+            var data = _mapManager.Data;
+            int startIndex = _mapManager.Data.CoordToIndex(data.Width / 2, data.Height / 2);
             if (_mapManager.TryPickRandomReachableGoal(startIndex, minManhattan, _allowDiagonals, out int goalIndex))
             {
                 StartVisualPath(startIndex, goalIndex);
@@ -147,7 +137,7 @@ namespace AI_Workshop03
 
             if (clearVisuals && _mapManager != null)
             {
-                _mapManager.ResetColorsToBase();
+                _mapRenderer2D.RefreshFromMapData();
                 _mapManager.ClearDebugCostsTouched();
             }
         }
@@ -188,7 +178,9 @@ namespace AI_Workshop03
             RemainingCost = 0;
             TotalPathCost = 0;
 
-            if (!_mapManager.IsValidCell(startIndex) || !_mapManager.IsValidCell(goalIndex))
+            var data = _mapManager.Data;
+
+            if (!data.IsValidCellIndex(startIndex) || !data.IsValidCellIndex(goalIndex))
             {
                 IsPathComputing = false;
                 onPathFound?.Invoke(null);
@@ -211,7 +203,7 @@ namespace AI_Workshop03
             if (visualizeAny)
             {
                 paintSteps = new();
-                _mapManager.ResetColorsToBase();
+                _mapRenderer2D.RefreshFromMapData();
                 _mapManager.ClearDebugCostsTouched();
 
                 if (visualizeAll)
@@ -219,8 +211,8 @@ namespace AI_Workshop03
 
                 if (showStartGoalMarkers)
                 {
-                    _mapManager.PaintCell(startIndex, _startColor);
-                    _mapManager.PaintCell(goalIndex, _goalColor);
+                    _mapRenderer2D.PaintCell(startIndex, _startColor);
+                    _mapRenderer2D.PaintCell(goalIndex, _goalColor);
                 }
             } 
 
@@ -262,7 +254,7 @@ namespace AI_Workshop03
                     break;
                 }
 
-                _mapManager.IndexToXY(currentIndex, out int currentX, out int currentY);
+                data.IndexToXY(currentIndex, out int currentX, out int currentY);
 
                 foreach (var (dx, dy, stepCost) in Neighbors8)
                 {
@@ -271,14 +263,14 @@ namespace AI_Workshop03
 
                     int newX = currentX + dx;
                     int newY = currentY + dy;
-                    if (!_mapManager.TryCoordToIndex(newX, newY, out int newIndex)) continue;
+                    if (!data.TryCoordToIndex(newX, newY, out int newIndex)) continue;
                     if (!_mapManager.GetWalkable(newIndex)) continue;
 
                     // Disallow diagonal ONLY when BOTH orthogonal side cells are blocked.
                     if (dx != 0 && dy != 0)
                     {
-                        bool sideAOpen = _mapManager.TryCoordToIndex(currentX + dx, currentY, out int sideA) && _mapManager.GetWalkable(sideA);
-                        bool sideBOpen = _mapManager.TryCoordToIndex(currentX, currentY + dy, out int sideB) && _mapManager.GetWalkable(sideB);
+                        bool sideAOpen = data.TryCoordToIndex(currentX + dx, currentY, out int sideA) && _mapManager.GetWalkable(sideA);
+                        bool sideBOpen = data.TryCoordToIndex(currentX, currentY + dy, out int sideB) && _mapManager.GetWalkable(sideB);
 
                         if (!sideAOpen && !sideBOpen)
                             continue;
@@ -408,8 +400,9 @@ namespace AI_Workshop03
 
         private int Heuristic(int fromIndex, int toIndex)
         {
-            _mapManager.IndexToXY(fromIndex, out int fromX, out int fromY);
-            _mapManager.IndexToXY(toIndex, out int toX, out int toY);
+            var data = _mapManager.Data;
+            data.IndexToXY(fromIndex, out int fromX, out int fromY);
+            data.IndexToXY(toIndex, out int toX, out int toY);
 
             int distanceX = Math.Abs(fromX - toX);
             int distanceY = Math.Abs(fromY - toY);
@@ -585,7 +578,7 @@ namespace AI_Workshop03
                 var step = steps[i];
 
                 if (step.TintStrength > 0f)
-                    _mapManager.PaintCellTint(step.Index, step.Color, step.TintStrength);
+                    _mapRenderer2D.PaintCellTint(step.Index, step.Color, step.TintStrength);
                 if (step.WriteCosts)
                     _mapManager.SetDebugCosts(step.Index, step.GCost, step.HCost, step.FCost);
 
@@ -598,8 +591,8 @@ namespace AI_Workshop03
 
             if (showStartGoal)
             {
-                _mapManager.PaintCell(startIndex, _startColor);
-                _mapManager.PaintCell(goalIndex, _goalColor);
+                _mapRenderer2D.PaintCell(startIndex, _startColor);
+                _mapRenderer2D.PaintCell(goalIndex, _goalColor);
             }
 
             IsVisualizing = false;

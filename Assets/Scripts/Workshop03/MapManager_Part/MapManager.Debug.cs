@@ -57,11 +57,13 @@ namespace AI_Workshop03
         public void SetDebugCosts(int index, int g, int h, int f)
         {
             if (!_showDebugCosts) return;
-            if (!IsValidCell(index)) return;
+            if (!_data.IsValidCellIndex(index)) return;
             if (_costLabelPrefab == null || _costLabelRoot == null) return;
 
-            if (_costLabels == null || _costLabels.Length != _cellCount)
-                _costLabels = new TMPro.TextMeshPro[_cellCount];
+            int n = _data.CellCount;
+
+            if (_costLabels == null || _costLabels.Length != n)
+                _costLabels = new TMPro.TextMeshPro[n];
 
             var label = _costLabels[index];
             if (label == null)
@@ -77,7 +79,7 @@ namespace AI_Workshop03
                 _costLabelsTouched.Add(index);
             }
 
-            label.transform.position = IndexToWorldCenterXZ(index, _costLabelOffsetY);
+            label.transform.position = _data.IndexToWorldCenterXZ(index, _costLabelOffsetY);
 
             // show approx tiles step cost by dividing by 10. Layout: g and h small, f big. Format to one decimal place
             label.text = $"<size=60%>G{g / 10f:0.0} H{h / 10f:0.0}</size>\n<size=100%><b>F{f / 10f:0.0}</b></size>";
@@ -107,16 +109,16 @@ namespace AI_Workshop03
         [ContextMenu("Debug/Corner Color Test")]
         private void DebugCornerColorTest()
         {
-            if (_cellCount <= 0) return;
+            if (_data == null || _data.CellCount <= 0) return;
+            if (_renderer2D == null) return;
 
             // Paint corners WITHOUT checker shading and WITHOUT skipping obstacles
-            PaintCell(CoordToIndex(0, 0), new Color32(255, 0, 0, 255), shadeLikeGrid: false, skipIfObstacle: false);                            // (0,0) red
-            PaintCell(CoordToIndex(_width - 1, 0), new Color32(0, 255, 0, 255), shadeLikeGrid: false, skipIfObstacle: false);                   // (w-1,0) green
-            PaintCell(CoordToIndex(0, _height - 1), new Color32(0, 0, 255, 255), shadeLikeGrid: false, skipIfObstacle: false);                  // (0,h-1) blue
-            PaintCell(CoordToIndex(_width - 1, _height - 1), new Color32(255, 255, 255, 255), shadeLikeGrid: false, skipIfObstacle: false);     // (w-1,h-1) white
+            _renderer2D.PaintCell(_data.CoordToIndex(0, 0), new Color32(255, 0, 0, 255),            shadeLikeGrid: false, skipIfObstacle: false);               // (0,0) red
+            _renderer2D.PaintCell(_data.CoordToIndex(_width - 1, 0), new Color32(0, 255, 0, 255),   shadeLikeGrid: false, skipIfObstacle: false);               // (w-1,0) green
+            _renderer2D.PaintCell(_data.CoordToIndex(0, _height - 1), new Color32(0, 0, 255, 255),  shadeLikeGrid: false, skipIfObstacle: false);               // (0,h-1) blue
+            _renderer2D.PaintCell(_data.CoordToIndex(_width - 1, _height - 1), new Color32(255, 255, 255, 255), shadeLikeGrid: false, skipIfObstacle: false);   // (w-1,h-1) white
 
-            _textureDirty = true;
-            FlushTexture();
+            _renderer2D.FlushTexture();
         }
 
 

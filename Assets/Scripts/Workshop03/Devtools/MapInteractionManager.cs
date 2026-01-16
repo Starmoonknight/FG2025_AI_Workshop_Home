@@ -7,16 +7,19 @@ namespace AI_Workshop03
 
     public sealed class MapInteractionManager : MonoBehaviour
     {
-        [SerializeField] 
-        private MapManager _board;
-        [SerializeField] 
-        private Renderer _groundRenderer; 
-        [SerializeField] 
-        private Transform _goalMarker;
-        [SerializeField] 
-        private InputAction _click;
-        [SerializeField] 
-        private Camera _cam;
+        [SerializeField] private MapManager _mapManager;
+        [SerializeField] private Renderer _groundRenderer; 
+        [SerializeField] private Transform _goalMarker;
+        [SerializeField] private InputAction _click;
+        [SerializeField] private Camera _cam;
+
+        private MapData _data;
+
+        private void Awake()
+        {
+            if (_mapManager == null) _mapManager = FindFirstObjectByType<MapManager>();
+            if (_mapManager != null) _data = _mapManager.Data;
+        }
 
         private void OnEnable()
         {
@@ -36,7 +39,7 @@ namespace AI_Workshop03
 
         private void OnClick(InputAction.CallbackContext _)
         {
-            if (_board == null || _goalMarker == null) return;
+            if (_mapManager == null || _goalMarker == null) return;
             if (_cam == null) _cam = Camera.main;
             if (_cam == null) return;
 
@@ -47,13 +50,13 @@ namespace AI_Workshop03
             if (hit.collider != groundCol) return;
 
             Vector2 uv = hit.textureCoord;
-            int x = Mathf.Clamp(Mathf.FloorToInt(uv.x * _board.Width), 0, _board.Width - 1);
-            int z = Mathf.Clamp(Mathf.FloorToInt(uv.y * _board.Height), 0, _board.Height - 1);
+            int x = Mathf.Clamp(Mathf.FloorToInt(uv.x * _mapManager.Width), 0, _mapManager.Width - 1);
+            int z = Mathf.Clamp(Mathf.FloorToInt(uv.y * _mapManager.Height), 0, _mapManager.Height - 1);
 
-            if (!_board.TryCoordToIndex(x, z, out int idx)) return;
-            if (!_board.GetWalkable(idx)) return;
+            if (!_data.TryCoordToIndex(x, z, out int idx)) return;
+            if (!_mapManager.GetWalkable(idx)) return;
 
-            _goalMarker.position = _board.IndexToWorldCenterXZ(idx, yOffset: 0f) + Vector3.up * 0.1f;
+            _goalMarker.position = _data.IndexToWorldCenterXZ(idx, yOffset: 0f) + Vector3.up * 0.1f;
         }
 
     }

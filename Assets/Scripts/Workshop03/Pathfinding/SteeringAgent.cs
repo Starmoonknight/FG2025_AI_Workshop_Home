@@ -157,7 +157,7 @@ namespace AI_Workshop03
         {
             index = -1;
 
-            int cellCount = _mapManager.CellCount;
+            int cellCount = _mapManager.Data.CellCount;
             if (cellCount <= 0) return false;
 
             int w = _mapManager.Width;
@@ -179,7 +179,7 @@ namespace AI_Workshop03
 
                 if (!inRing) continue;
 
-                int candidate = _mapManager.CoordToIndex(x, y);
+                int candidate = _mapManager.Data.CoordToIndex(x, y);
                 if (_mapManager.GetWalkable(candidate))
                 {
                     index = candidate;
@@ -190,7 +190,7 @@ namespace AI_Workshop03
             // fallback, anywhere
             for (int t = 0; t < tries; t++)
             {
-                int candidate = UnityEngine.Random.Range(0, _mapManager.CellCount);
+                int candidate = UnityEngine.Random.Range(0, _mapManager.Data.CellCount);
                 if (_mapManager.GetWalkable(candidate))
                 {
                     index = candidate;
@@ -212,7 +212,7 @@ namespace AI_Workshop03
 
         private Vector3 WorldFromIndex(int index)
         {
-            return _mapManager.IndexToWorldCenterXZ(index, _agentPlaneOffsetY);
+            return _mapManager.Data.IndexToWorldCenterXZ(index, _agentPlaneOffsetY);
         }
 
     }

@@ -36,19 +36,17 @@ namespace AI_Workshop03
         private bool[] _blocked;
         private int[] _terrainCost;
         private Color32[] _baseColors;
-        private byte[] _terrainKey;
+        private byte[] _terrainKindIds;
         private byte[] _lastPaintLayerId;
 
-        private Color32 _baseWalkableColor;
+        private byte _baseTerrainKind;
         private int _baseWalkableCost;
+        private Color32 _baseWalkableColor;
 
         // Rng instances
         private System.Random _rng;
         private System.Random _rngOrder;
 
-        // Constants: Early/Late placement bias weights
-        private const double MinEarlyWeight = 0.1;   // bias=0 still has a chance
-        private const double MaxEarlyWeight = 10.0;  // bias=1 strongly favored
 
         // Neighbor direction offsets
         private static readonly (int dirX, int dirY)[] Neighbors4 =
@@ -64,87 +62,6 @@ namespace AI_Workshop03
 
         // Helper: get opposite side index
         private static int OppositeSide(int side) => side ^ 1; // 0<->1, 2<->3
-
-
-
-        #region Terrain ordering / ID assignment helpers
-
-        private static double BiasToWeight(float bias01)
-        {
-            bias01 = Mathf.Clamp01(bias01);
-
-            // Geometric lerp: min * (max/min)^t
-            // makes 0.5 actually be the midpoint between min and max in multiplicative scale
-            double ratio = MaxEarlyWeight / MinEarlyWeight;
-            return MinEarlyWeight * Math.Pow(ratio, bias01);
-        }
-
-
-        /// <summary>
-        /// Weighted random permutation (without replacement) on a subrange.
-        /// Uses Efraimidis–Spirakis style keys: key = -ln(U)/w, sort ascending.
-        /// </summary>
-        private static void WeightedShuffleRangeByEarlyBias(
-            List<TerrainTypeData> list,
-            int start,
-            int count,
-            System.Random rngOrder)
-        {
-
-            if (count <= 1) return;
-
-            var keys = new double[count];
-            var items = new TerrainTypeData[count];
-
-            for (int k = 0; k < count; k++)
-            {
-                TerrainTypeData terrain = list[start + k];
-                items[k] = terrain;
-
-                float bias = (terrain != null) ? terrain.EarlyPlacementBias : 0f;
-                double w = BiasToWeight(bias);
-                if (w <= 0) w = 1e-9;
-
-                double u = 1.0 - rngOrder.NextDouble(); // (0,1]
-                keys[k] = -Math.Log(u) / w; // smaller key => earlier
-            }
-
-            Array.Sort(keys, items);        // ascending
-            for (int k = 0; k < count; k++)
-                list[start + k] = items[k];
-        }
-
-
-        /// <summary>
-        /// Preserves Order as "priority buckets": sorts by Order, then weighted-shuffles each equal-Order run.
-        /// </summary>
-        private static void ShuffleWithinOrderBucketsByEarlyBias(
-            List<TerrainTypeData> list,
-            System.Random rngOrder
-            )
-        {
-            // first sort by order
-            list.Sort((a, b) => (a?.Order ?? 0).CompareTo(b?.Order ?? 0));
-
-            // then shuffle each bucket by weighted early bias 
-            int bucketStart = 0;
-            while (bucketStart < list.Count)
-            {
-                int bucketOrder = list[bucketStart]?.Order ?? 0;
-                int bucketEndExclusive = bucketStart + 1;
-
-                while (bucketEndExclusive < list.Count && ((list[bucketEndExclusive]?.Order ?? 0) == bucketOrder))
-                    bucketEndExclusive++;
-
-                int bucketCount = bucketEndExclusive - bucketStart;
-                WeightedShuffleRangeByEarlyBias(list, bucketStart, bucketCount, rngOrder);
-
-                bucketStart = bucketEndExclusive;
-            }
-        }
-
-
-        #endregion
 
 
 
@@ -195,7 +112,7 @@ namespace AI_Workshop03
                 if (_blocked[index] && terrain.AllowOverwriteObstacle)
                     _blocked[index] = false;
 
-                _terrainKey[index] = (byte)terrain.TerrainID;
+                _terrainKindIds[index] = (byte)terrain.TerrainID;
                 _terrainCost[index] = terrain.Cost;
                 _baseColors[index] = terrain.Color;
                 _lastPaintLayerId[index] = terrainLayerId;
@@ -219,7 +136,7 @@ namespace AI_Workshop03
                 _blocked[index] = true;
                 _blockedCount++;
 
-                _terrainKey[index] = (byte)terrain.TerrainID;
+                _terrainKindIds[index] = (byte)terrain.TerrainID;
                 _terrainCost[index] = 0;
                 _lastPaintLayerId[index] = terrainLayerId;
                 _baseColors[index] = terrain.Color;
@@ -268,6 +185,7 @@ namespace AI_Workshop03
         }
 
 
+
         private int CoordToIndex(int x, int y) => x + y * _width;
 
         private bool TryCoordToIndex(int x, int y, out int index)
@@ -280,6 +198,8 @@ namespace AI_Workshop03
             index = x + y * _width;
             return true;
         }
+
+
 
         private void IndexToXY(int index, out int x, out int y)
         {

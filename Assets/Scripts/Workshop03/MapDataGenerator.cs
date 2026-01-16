@@ -16,24 +16,25 @@ namespace AI_Workshop03
     // MapDataGenerator.cs         -   Purpose: the "header / face file", top-level API and properties
     public sealed partial class MapDataGenerator                       // NOTE: the class was a public sealed class before I changed it to became partial, can thosde two keywords coexist?
     {
+
         public bool Debug_DumpFocusWeights { get; set; } = false;
         public bool Debug_DumpFocusWeightsVerbose { get; set; } = false;
+
+
+        private MapGenDebugReporter _debugReporter;
+        private MapGenDebugReporter DebugReporter
+            => _debugReporter ??= new MapGenDebugReporter();
+
 
 
 
         // NOTE: Should add summary content of what the generator does
 
 
+
+
         public void Generate(
-            int width,
-            int height,
-            bool[] blocked,
-            byte[] terrainKey,
-            int[] terrainCost,
-            Color32[] baseColors,
-            byte[] lastPaintLayerId,
-            Color32 baseWalkableColor,
-            int baseWalkableCost,
+            MapData data,
             int seed,
             int orderSeed,
             TerrainTypeData[] terrainData,
@@ -46,22 +47,24 @@ namespace AI_Workshop03
 
             // --- Get reference pointers to current game board ---
 
-            _width = width;
-            _height = height;
-            _cellCount = checked(width * height);
+            _width = data.Width;
+            _height = data.Height;
+            _cellCount = data.CellCount;
 
-            _blocked = blocked ?? throw new ArgumentNullException(nameof(blocked));
-            _terrainKey = terrainKey ?? throw new ArgumentNullException(nameof(terrainKey));
-            _terrainCost = terrainCost ?? throw new ArgumentNullException(nameof(terrainCost));
-            _baseColors = baseColors ?? throw new ArgumentNullException(nameof(baseColors));
-            _lastPaintLayerId = lastPaintLayerId ?? throw new ArgumentNullException(nameof(lastPaintLayerId));
+            _baseWalkableCost = data.BaseTerrainCost;
+            _baseWalkableColor = data.BaseTerrainColor;
+            _baseTerrainKind = data.BaseTerrainKind;
 
-            if (_blocked.Length != _cellCount || _terrainKey.Length != _cellCount || _terrainCost.Length != _cellCount ||
+            _blocked = data.IsBlocked ?? throw new ArgumentNullException(nameof(data.IsBlocked));
+            _terrainKindIds = data.TerrainKindIds ?? throw new ArgumentNullException(nameof(data.TerrainKindIds));
+            _terrainCost = data.TerrainCosts ?? throw new ArgumentNullException(nameof(data.TerrainCosts));
+            _baseColors = data.BaseCellColors ?? throw new ArgumentNullException(nameof(data.BaseCellColors));
+            _lastPaintLayerId = data.LastPaintLayerIds ?? throw new ArgumentNullException(nameof(data.LastPaintLayerIds));
+
+            if (_blocked.Length != _cellCount || _terrainKindIds.Length != _cellCount || _terrainCost.Length != _cellCount ||
                 _baseColors.Length != _cellCount || _lastPaintLayerId.Length != _cellCount)
                 throw new ArgumentException("Board arrays length mismatch.");
 
-            _baseWalkableColor = baseWalkableColor;
-            _baseWalkableCost = baseWalkableCost;
 
             _rng = new System.Random(seed);
             _rngOrder = new System.Random(orderSeed);
@@ -82,7 +85,8 @@ namespace AI_Workshop03
 
             // --- Generate Debug Data  ---
 
-            DebugDumpFocusWeights(seed, terrainData);
+            if (Debug_DumpFocusWeights)
+                DebugReporter.DumpFocusWeights(seed, _width, _height, terrainData, Debug_DumpFocusWeightsVerbose, areaWeights => ComputeInteriorMarginCells(in areaWeights));
 
 
 
@@ -99,8 +103,8 @@ namespace AI_Workshop03
                 else walkablesList.Add(terrain);
             }
 
-            ShuffleWithinOrderBucketsByEarlyBias(obstaclesList, _rngOrder);
-            ShuffleWithinOrderBucketsByEarlyBias(walkablesList, _rngOrder);
+            TerrainOrderUtility.ShuffleWithinOrderBucketsByEarlyBias(obstaclesList, _rngOrder);
+            TerrainOrderUtility.ShuffleWithinOrderBucketsByEarlyBias(walkablesList, _rngOrder);
 
 
             var terrainDataId = new Dictionary<TerrainTypeData, byte>(terrainData.Length);            // terrainId is assigned by list order after sorting, 0 reserved for base
@@ -160,7 +164,7 @@ namespace AI_Workshop03
                 if (walkableCount <= 0) continue;
 
                 float unblockedPercent = walkableCount / (float)_cellCount;
-                if (unblockedPercent < minUnblockedPercent) continue;                        // make sure map don't have to many obstacles placed
+                if (unblockedPercent < minUnblocked) continue;                        // make sure map don't have to many obstacles placed
 
                 int reachableCount = buildReachableFrom(startIndex);
                 float reachablePercent = reachableCount / (float)walkableCount;
