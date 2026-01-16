@@ -120,7 +120,7 @@ namespace AI_Workshop03
 
             for (int i = 0; i < _data.CellCount; i++)
             {
-                if (_data.IsBlocked[i]) continue;                      // skip unwalkable cells
+                if (_data.IsBlocked[i]) continue;               // skip unwalkable cells
                 if (_reachStamp[i] != _reachStampId) continue;  // if not reachable in current step
                 if (i == startIndex) continue;                  // skip starting cell
 
@@ -137,6 +137,37 @@ namespace AI_Workshop03
 
             return goalIndex != -1;
         }
+
+        // NEW
+        // check if point A and point B can reach eachother, by walkable tiles on the map
+        public bool TryValidateReachablePair(int startIndex, int goalIndex, bool allowDiagonals)
+        {
+            if (!_data.IsValidCellIndex(startIndex) || !_data.IsValidCellIndex(goalIndex)) return false;
+            if (_data.IsBlocked[startIndex] || _data.IsBlocked[goalIndex]) return false;
+
+            BuildReachableFrom(startIndex, allowDiagonals);
+            return _reachStamp[goalIndex] == _reachStampId;
+        }
+
+        // NEW
+        // pure stamp check
+        public bool IsIndexReachableFromLastBuild(int index)
+        {
+            return _data.IsValidCellIndex(index) 
+                && _reachStamp[index] == _reachStampId;
+        }
+
+        // NEW
+        // stamp check with strickter belt + suspenders safety guard
+        public bool IsWalkableIndexReachableFromLastBuild(int index)
+        {
+            return _data.IsValidCellIndex(index)
+                && !_data.IsBlocked[index]
+                && _reachStamp[index] == _reachStampId;
+        }
+
+
+
 
 
 

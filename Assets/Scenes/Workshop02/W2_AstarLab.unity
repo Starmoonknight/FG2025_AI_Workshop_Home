@@ -432,7 +432,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::AI_Workshop02.NavigationService
   _boardManager: {fileID: 1164954716}
   _allowDiagonals: 1
-  _stepDelay: 0.1
+  _stepDelay: 0.01
   _triedColor:
     serializedVersion: 2
     rgba: 4294901945

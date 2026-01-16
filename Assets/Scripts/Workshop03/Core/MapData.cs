@@ -84,16 +84,18 @@ namespace AI_Workshop03
         public int Height { get; private set; }                 // Grid height in cells (Y dimension)
         public int CellCount => Width * Height;                 // Total cells in grid (Width * Height)
 
+        public int MapGenSeed { get; private set; }             // Seed that was used to generate this map stored MapData  (0 = random)
+
 
         // Base defaults (NOT per-cell). These are used to reset the map and define "empty baseline state".
         public int BaseTerrainCost { get; private set; } = 10;  // Baseline movement cost applied to every cell during ResetToBase (fallback = 10)
-        public byte BaseTerrainKind { get; private set; }       // Baseline terrain type applied to every cell during ResetToBase (ex: Land/Grass)
+        public byte BaseTerrainType { get; private set; }       // Baseline terrain type applied to every cell during ResetToBase (ex: Land/Grass)
         public Color32 BaseTerrainColor { get; private set; }   // Baseline visual color applied to every cell during ResetToBase
 
 
         // Truth arrays (SoA). These represent the CURRENT map state and are the single source of truth for gameplay + visuals.        public bool[] IsBlocked { get; private set; }           // True = cell is blocked/unwalkable (obstacle)
         public bool[] IsBlocked { get; private set; }           // True = cell is blocked/unwalkable (obstacle). False = walkable.
-        public byte[] TerrainKindIds { get; private set; }      // Current terrain kind per cell (ex: Land, Water, Mountain...) (changes during generation)
+        public byte[] TerrainTypeIds { get; private set; }      // Current terrain kind per cell (ex: Land, Water, Mountain...) (changes during generation)
         public int[] TerrainCosts { get; private set; }         // Current movement cost per cell (pathfinding reads this)
         public Color32[] BaseCellColors { get; private set; }   // Current base color per cell (what the renderer should show as the "ground", written by generator / renderer reads)
 
@@ -127,7 +129,7 @@ namespace AI_Workshop03
 
             //Protected = new bool[count];
             IsBlocked = new bool[n];
-            TerrainKindIds = new byte[n];
+            TerrainTypeIds = new byte[n];
             TerrainCosts = new int[n];
             BaseCellColors = new Color32[n];
             LastPaintLayerIds = new byte[n];
@@ -148,7 +150,7 @@ namespace AI_Workshop03
             for (int i = 0; i < n; i++)
             {
                 IsBlocked[i] = false;
-                TerrainKindIds[i] = baseTerrainKind;
+                TerrainTypeIds[i] = baseTerrainKind;
                 TerrainCosts[i] = baseTerrainCost;
                 BaseCellColors[i] = baseTerrainColor;
                 LastPaintLayerIds[i] = 0;
@@ -158,8 +160,14 @@ namespace AI_Workshop03
 
 
         private void SetBaseTerrainCost(int cost) => BaseTerrainCost = Mathf.Max(1, cost);
-        private void SetBaseTerrainKind(byte kind) => BaseTerrainKind = kind;
+        private void SetBaseTerrainKind(byte type) => BaseTerrainType = type;
         private void SetBaseTerrainColor(Color32 color) => BaseTerrainColor = color;
+
+
+        // Can seed be a negative? - how will that interact with code
+        // Should I use guards? - min/ max value
+        // Should I use uint? - problems with showing some var types in the inspector might interfere, also what size of seed do I want/get? 
+        public void SetMapGenSeed(int seed) => MapGenSeed = seed;
 
 
 
@@ -200,6 +208,32 @@ namespace AI_Workshop03
         {
             IndexToXY(index, out int x, out int z);
             return new Vector3(x + 0.5f, yOffset, z + 0.5f);
+        }
+
+        // NEW
+        public bool TryWorldToCoordXZ(Vector3 worldPos, out int x, out int y)
+        {
+            // NOTE: Here it is assumed:
+            // - Cell size = 1 unit
+            // - Grid origin = (0,0) in world space
+            //
+            // IF THIS CHANGES -> must update,    shoulp probably set this to be a stored value from MapManager later anyways 
+
+            x = Mathf.FloorToInt(worldPos.x);
+            y = Mathf.FloorToInt(worldPos.z);
+
+            return IsValidCellCoord(x, y);
+        }
+
+        // NEW
+        public bool TryWorldToIndexXZ(Vector3 worldPos, out int index)
+        {
+            index = -1;
+
+            if (!TryWorldToCoordXZ(worldPos, out int x, out int y))
+                return false;
+
+            return TryCoordToIndex(x, y, out index);
         }
 
 

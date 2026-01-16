@@ -36,10 +36,10 @@ namespace AI_Workshop03
         private bool[] _blocked;
         private int[] _terrainCost;
         private Color32[] _baseColors;
-        private byte[] _terrainKindIds;
+        private byte[] _terrainTypeIds;
         private byte[] _lastPaintLayerId;
 
-        private byte _baseTerrainKind;
+        private byte _baseTerrainType;
         private int _baseWalkableCost;
         private Color32 _baseWalkableColor;
 
@@ -112,7 +112,7 @@ namespace AI_Workshop03
                 if (_blocked[index] && terrain.AllowOverwriteObstacle)
                     _blocked[index] = false;
 
-                _terrainKindIds[index] = (byte)terrain.TerrainID;
+                _terrainTypeIds[index] = (byte)terrain.TerrainID;
                 _terrainCost[index] = terrain.Cost;
                 _baseColors[index] = terrain.Color;
                 _lastPaintLayerId[index] = terrainLayerId;
@@ -136,7 +136,7 @@ namespace AI_Workshop03
                 _blocked[index] = true;
                 _blockedCount++;
 
-                _terrainKindIds[index] = (byte)terrain.TerrainID;
+                _terrainTypeIds[index] = (byte)terrain.TerrainID;
                 _terrainCost[index] = 0;
                 _lastPaintLayerId[index] = terrainLayerId;
                 _baseColors[index] = terrain.Color;

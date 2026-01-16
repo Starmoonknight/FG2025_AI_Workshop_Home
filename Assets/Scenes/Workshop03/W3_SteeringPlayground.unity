@@ -573,10 +573,10 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 925457159}
-  - component: {fileID: 925457158}
   - component: {fileID: 925457160}
+  - component: {fileID: 925457158}
   m_Layer: 0
-  m_Name: GameBoard
+  m_Name: Map Manager
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -597,43 +597,22 @@ MonoBehaviour:
   _mainCamera: {fileID: 1352866328}
   _cameraPadding: 1
   _boardRenderer: {fileID: 7347946356751452807}
-  _width: 800
-  _height: 800
-  _flipTextureX: 1
-  _flipTextureY: 1
+  _width: 100
+  _height: 100
+  _baseTerrainCost: 10
   _seed: 0
   _lastGeneratedSeed: 0
   _minUnblockedPercent: 0.5
   _minReachablePercent: 0.75
   _maxGenerateAttempts: 50
   _terrainData:
-  - {fileID: 11400000, guid: 35d23499d3d9f9b43a1ecfa87c16fc09, type: 2}
-  - {fileID: 11400000, guid: c7048e40867078440b2180ce8128f44f, type: 2}
-  - {fileID: 11400000, guid: 63c84b1df77582942b53a6b72f5cfdfb, type: 2}
-  - {fileID: 11400000, guid: 29ae17603b2746f44bc9b6ba309b0364, type: 2}
-  - {fileID: 11400000, guid: 5c1ba2d1f72ad8642a8305d50565753f, type: 2}
-  - {fileID: 11400000, guid: ea26128e3c2a60e4dac0a13d92ecdc40, type: 2}
-  - {fileID: 11400000, guid: ed50f5ec955d75140b91cf0b0e54181b, type: 2}
-  - {fileID: 11400000, guid: cc6c29f1888a8ec439043b2811ca921b, type: 2}
-  - {fileID: 11400000, guid: 90bea726e6a70f244b6eae7da029c84a, type: 2}
-  - {fileID: 11400000, guid: ef0476bd1055b7544ab6fd670fa36fa6, type: 2}
-  - {fileID: 11400000, guid: 25c8eb9bca67bc74ead75032ed857f88, type: 2}
-  - {fileID: 11400000, guid: 1b960c19c0eed8e43bf4883323f2aa47, type: 2}
-  - {fileID: 11400000, guid: 418e50fa74ee0ce4dbe1433a91663efb, type: 2}
-  - {fileID: 11400000, guid: 4517ab0b3623501449fd12fef7d8ca95, type: 2}
-  - {fileID: 11400000, guid: e51ca2e63cb70d94cb57bdd2e9448f8e, type: 2}
-  - {fileID: 11400000, guid: e136d6e0d11249249ae3932bed462e35, type: 2}
-  _obstacleCubePrefab: {fileID: 0}
-  _obstacleRoot: {fileID: 1671115094}
-  _showSeedHud: 0
-  _seedHudLabel: {fileID: 332636614}
-  _seedHudPrefix: 'Seed: '
-  _dumpFocusWeights: 1
-  _dumpFocusWeightsVerbose: 1
-  _showDebugCosts: 0
-  _costLabelPrefab: {fileID: 6433729425798609155, guid: f2738bf5725d73e47b3baf4e4a0218dc, type: 3}
-  _costLabelRoot: {fileID: 1524415437}
-  _costLabelOffsetY: 0.05
+  - {fileID: 11400000, guid: ae95897352af92f4f9a907d2b4f57f60, type: 2}
+  - {fileID: 11400000, guid: 680da92830c4a3d41b5fb4e1540c1148, type: 2}
+  - {fileID: 11400000, guid: 81c52b5a153f6174db12a0672d8062e1, type: 2}
+  - {fileID: 11400000, guid: 2760062d48b5080438cf969619346f7d, type: 2}
+  - {fileID: 11400000, guid: e77050331e772384a9120e7126f8def3, type: 2}
+  _renderer2D: {fileID: 925457160}
+  _worldObjects: {fileID: 0}
   _walkableColor:
     serializedVersion: 2
     rgba: 4294967295
@@ -643,6 +622,15 @@ MonoBehaviour:
   _unReachableColor:
     serializedVersion: 2
     rgba: 4288059135
+  _showSeedHud: 1
+  _seedHudLabel: {fileID: 332636614}
+  _seedHudPrefix: 'Seed: '
+  _dumpFocusWeights: 1
+  _dumpFocusWeightsVerbose: 0
+  _showDebugCosts: 0
+  _costLabelPrefab: {fileID: 6433729425798609155, guid: f2738bf5725d73e47b3baf4e4a0218dc, type: 3}
+  _costLabelRoot: {fileID: 1524415437}
+  _costLabelOffsetY: 0.05
 --- !u!4 &925457159
 Transform:
   m_ObjectHideFlags: 0
@@ -669,10 +657,59 @@ MonoBehaviour:
   m_GameObject: {fileID: 925457157}
   m_Enabled: 1
   m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4b265de598c9ec949934f5b5c09b01ac, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::AI_Workshop03.MapRenderer2D
+  _mapManager: {fileID: 925457158}
+  _targetRenderer: {fileID: 7347946356751452807}
+  _flipTextureX: 1
+  _flipTextureY: 1
+--- !u!1 &1223029779
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1223029780}
+  - component: {fileID: 1223029781}
+  m_Layer: 0
+  m_Name: Navigation Manager
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1223029780
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1223029779}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1223029781
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1223029779}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 001ef7c1cafe5de41b321da3d29e9c0b, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AI_Workshop03.NavigationServiceManager
   _mapManager: {fileID: 925457158}
+  _mapRenderer2D: {fileID: 0}
   _allowDiagonals: 1
   _searchDelay: 0.01
   _pathDelay: 0.005
@@ -974,7 +1011,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AI_Workshop03.SteeringAgent
   _agentPlaneOffsetY: 0.5
-  _navigationService: {fileID: 925457160}
+  _navigationService: {fileID: 1223029781}
   _mapManager: {fileID: 925457158}
   _speed: 10
   _waypointRadius: 0.05
@@ -1109,6 +1146,7 @@ SceneRoots:
   m_Roots:
   - {fileID: 1352866329}
   - {fileID: 307017233}
+  - {fileID: 1223029780}
   - {fileID: 925457159}
   - {fileID: 7347946356751452806}
   - {fileID: 2647801867824992714}

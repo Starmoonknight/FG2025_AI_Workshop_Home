@@ -42,6 +42,7 @@ namespace AI_Workshop03
         private ushort[] _seenId;   // to track which nodes have been initialized for the current search
         private byte[] _state;      // 0 = unvisited, 1 = in open set, 2 = closed
 
+        private MapData _data;
 
         private Coroutine _computeCo; 
         private Coroutine _replayCo;
@@ -75,13 +76,40 @@ namespace AI_Workshop03
 
         private void Awake()
         {
+            if (_mapManager == null) _mapManager = FindFirstObjectByType<MapManager>();
+            if (_mapRenderer2D == null) _mapRenderer2D = FindFirstObjectByType<MapRenderer2D>();
+        }
+
+        private void OnEnable()
+        {
+            if (_mapManager == null) return;
+
+            _mapManager.OnMapRebuilt += HandleMapRebuilt;
+
+            if (_mapManager.Data != null)
+                HandleMapRebuilt(_mapManager.Data);
+        }
+
+        private void OnDisable()
+        {
+            if (_mapManager != null) _mapManager.OnMapRebuilt -= HandleMapRebuilt;
+        }
+
+        private void HandleMapRebuilt(MapData data)
+        {
+            //if(IsPathComputing)
+            CancelPath(clearVisuals: false);
+
+            _data = data;
             EnsureCapacity();
         }
 
+
         private void EnsureCapacity()
         {
-            if (_mapManager == null) _mapManager = FindFirstObjectByType<MapManager>();
-            _totalCells = _mapManager.Data.CellCount;
+            if (_data == null) return;
+
+            _totalCells = _data.CellCount;
 
             if (_fCost == null  || _fCost.Length  != _totalCells) _fCost  = new int[_totalCells];
             if (_gCost == null  || _gCost.Length  != _totalCells) _gCost  = new int[_totalCells];

@@ -14,8 +14,7 @@ namespace AI_Workshop03
 
         private void Awake()
         {
-            if (_mapManager == null)
-                _mapManager = FindFirstObjectByType<MapManager>();
+            if (_mapManager == null) _mapManager = FindFirstObjectByType<MapManager>();
         }
 
         private void OnEnable()

@@ -53,15 +53,15 @@ namespace AI_Workshop03
 
             _baseWalkableCost = data.BaseTerrainCost;
             _baseWalkableColor = data.BaseTerrainColor;
-            _baseTerrainKind = data.BaseTerrainKind;
+            _baseTerrainType = data.BaseTerrainType;
 
             _blocked = data.IsBlocked ?? throw new ArgumentNullException(nameof(data.IsBlocked));
-            _terrainKindIds = data.TerrainKindIds ?? throw new ArgumentNullException(nameof(data.TerrainKindIds));
+            _terrainTypeIds = data.TerrainTypeIds ?? throw new ArgumentNullException(nameof(data.TerrainTypeIds));
             _terrainCost = data.TerrainCosts ?? throw new ArgumentNullException(nameof(data.TerrainCosts));
             _baseColors = data.BaseCellColors ?? throw new ArgumentNullException(nameof(data.BaseCellColors));
             _lastPaintLayerId = data.LastPaintLayerIds ?? throw new ArgumentNullException(nameof(data.LastPaintLayerIds));
 
-            if (_blocked.Length != _cellCount || _terrainKindIds.Length != _cellCount || _terrainCost.Length != _cellCount ||
+            if (_blocked.Length != _cellCount || _terrainTypeIds.Length != _cellCount || _terrainCost.Length != _cellCount ||
                 _baseColors.Length != _cellCount || _lastPaintLayerId.Length != _cellCount)
                 throw new ArgumentException("Board arrays length mismatch.");
 

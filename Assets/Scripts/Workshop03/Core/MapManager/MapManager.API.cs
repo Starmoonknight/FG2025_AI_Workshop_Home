@@ -51,7 +51,7 @@ namespace AI_Workshop03
             _data.IsBlocked[index] = !isWalkable;         // blocked is the inverse of walkable, so need to register the opposit here to follow th name logic
 
             _data.LastPaintLayerIds[index] = 0;
-            _data.TerrainKindIds[index] = (byte)TerrainID.Land;
+            _data.TerrainTypeIds[index] = (byte)TerrainID.Land;
 
             if (isWalkable)
             {
@@ -118,7 +118,7 @@ namespace AI_Workshop03
             if (!_data.IsValidCellIndex(index)) throw new ArgumentOutOfRangeException(nameof(index));
 
             _data.IsBlocked[index] = blocked;
-            _data.TerrainKindIds[index] = terrainKey;
+            _data.TerrainTypeIds[index] = terrainKey;
             _data.TerrainCosts[index] = blocked ? 0 : terrainCost;
             _data.BaseCellColors[index] = baseColor;
             _data.LastPaintLayerIds[index] = paintLayerId;
