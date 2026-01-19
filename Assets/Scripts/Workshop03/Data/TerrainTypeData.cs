@@ -42,6 +42,9 @@ namespace AI_Workshop03
         [Tooltip("Color painted into the board base colors.")]
         public Color32 Color = new Color32(255, 255, 255, 255);
 
+        [Tooltip("Use the terrain color to tint the attached prefab")]
+        public bool ColorToTintPrefab = false;
+
         [Tooltip(
             "Movement cost written into the board's terrainCost[] for painted WALKABLE cells.\n\n" +
             "Note: When IsObstacle is true, BoardGenerator.ApplyObstacles() sets cost to 0 regardless of this value."

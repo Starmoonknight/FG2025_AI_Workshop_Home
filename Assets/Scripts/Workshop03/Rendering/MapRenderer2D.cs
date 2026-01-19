@@ -1,4 +1,5 @@
 using System;
+using Unity.Burst.CompilerServices;
 using UnityEngine;
 
 
@@ -13,9 +14,9 @@ namespace AI_Workshop03
 
         [Header("References")]
         [SerializeField] private MapManager _mapManager;
-        [SerializeField] private Renderer _targetRenderer;
 
         [Header("Texture Settings")]
+        [SerializeField] private bool _autoDetectFlip = true;
         [SerializeField] private bool _flipTextureX;
         [SerializeField] private bool _flipTextureY;
 
@@ -25,6 +26,20 @@ namespace AI_Workshop03
         private Color32[] _texturePixels;
         private Texture2D _gridTexture;
         private bool _textureDirty;
+
+        private MaterialPropertyBlock _matPropertyBlock;
+        private Color _boardTint = Color.white;
+
+        private static readonly int BaseMapId = Shader.PropertyToID("_BaseMap");        // URP
+        private static readonly int MainTexId = Shader.PropertyToID("_MainTex");        // Built-in
+        private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");    // URP
+        private static readonly int ColorId = Shader.PropertyToID("_Color");            // Built-in
+
+
+        private Renderer TargetRenderer => _mapManager != null ? _mapManager.BoardRenderer : null;
+        private Collider BoardCollider => _mapManager != null ? _mapManager.BoardCollider : null;
+
+        public Color BoardTint => _boardTint;
 
 
         #endregion
@@ -37,12 +52,15 @@ namespace AI_Workshop03
                 _mapManager = FindFirstObjectByType<MapManager>();
 
 
-            if (_targetRenderer == null)
+            if (TargetRenderer == null)
                 Debug.LogWarning("[MapRenderer2D] Target Renderer not assigned.", this);
         }
 
         private void OnEnable()
         {
+            if (_mapManager == null)
+                _mapManager = FindFirstObjectByType<MapManager>();
+
             if (_mapManager != null)
             {
                 _mapManager.OnMapRebuilt += HandleMapRebuilt;
@@ -73,14 +91,24 @@ namespace AI_Workshop03
         private void HandleMapRebuilt(MapData data)
         {
             _data = data;
+
             EnsureBuffers();
             EnsureTexture();
+            ApplyTextureToRenderer(); 
+
+            AutoDetectTextureFlipFromUV();
             RebuildCellColorsFromBase();
             FlushTexture();
+
+            if (TargetRenderer != null)
+                Debug.Log($"RendererPos={TargetRenderer.transform.position} GridCenter={_data.GridCenter}");
+
         }
 
         private void EnsureBuffers()
         {
+            if (_data == null) return;
+
             int n = _data.CellCount;
 
             if (_cellColors == null || _cellColors.Length != n)
@@ -99,6 +127,8 @@ namespace AI_Workshop03
 
         private void EnsureTexture()
         {
+            if (_data == null) return;
+
             if (_gridTexture == null || _gridTexture.width != _data.Width || _gridTexture.height != _data.Height)
             {
                 // Create new texture
@@ -110,29 +140,93 @@ namespace AI_Workshop03
             }
 
             // Assign to material
-            if (_targetRenderer != null)
-            {
-                // Need to really look into this part more, right now this creates a unique material instance per object?
-                // Keeping it as .material for now to avoid unintended global texture replacement.
-                //      -> Since it's generating a unique _gridTexture per renderer anyway? I think it's fine for now.
+            ApplyTextureToRenderer();
+        }
 
-                //var mat = _targetRenderer.material;         // Should maybe change to avoid instancing materials later: var mat = _targetRenderer.sharedMaterial; 
+        private void ApplyTextureToRenderer()
+        {
+            // Need to really look into this part more, right now this creates a unique material instance per object?
+            // Keeping it as .material for now to avoid unintended global texture replacement.
+            //      -> Since it's generating a unique _gridTexture per renderer anyway? I think it's fine for now.
+            // also look into the use of MaterialPropertyBlock and sharedMaterial
 
-                var mat = _targetRenderer.material;
+            //var mat = _targetRenderer.material;         // Should maybe change to avoid instancing materials later: var mat = _targetRenderer.sharedMaterial; 
+            // but unless the board has it's own material using sharedMaterial on it could affect and ruin all objects useing the unity default material
 
-                // Works for many shaders
-                mat.mainTexture = _gridTexture;
+            // using a property block should allow me to change texture by effecting material properties per renderer,
+            // without making a new one each time, and "should" protect other objects using the same mat, I think.. 
 
-                // URP Lit / URP Unlit
-                if (mat.HasProperty("_BaseMap")) mat.SetTexture("_BaseMap", _gridTexture);
+            // Decided to go with using MPB (material property block) for now
 
-                // Built-in / legacy shaders
-                if (mat.HasProperty("_MainTex")) mat.SetTexture("_MainTex", _gridTexture);
+            var rend = TargetRenderer;
+            if (rend == null || _gridTexture == null) return;
 
-                // Make sure color doesn't tint the texture darker
-                if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", Color.white);
-                if (mat.HasProperty("_Color")) mat.SetColor("_Color", Color.white);
-            }
+            _matPropertyBlock ??= new MaterialPropertyBlock();
+            rend.GetPropertyBlock(_matPropertyBlock);
+
+            // Texture override (URP + Built-in fallback)
+            _matPropertyBlock.SetTexture(BaseMapId, _gridTexture);
+            _matPropertyBlock.SetTexture(MainTexId, _gridTexture);
+
+            // Tinting (URP + Built-in fallback)
+            _matPropertyBlock.SetColor(BaseColorId, _boardTint);
+            _matPropertyBlock.SetColor(ColorId, _boardTint);
+
+            rend.SetPropertyBlock(_matPropertyBlock);
+        }
+
+        // The visual flipping caused soooo much problems when having my grid be in XZ space compared to XY space.... 
+        // This method should the visuals stay correct as long as the board mesh stays a flat, unrotated XZ plane. And that MapData world mapping matches the board placement.
+        private void AutoDetectTextureFlipFromUV()
+        {
+            if (!_autoDetectFlip) return;
+            if (_mapManager == null) return;
+            if (TargetRenderer == null) return;
+            if (_data == null) return;
+
+            // this check needs at least 2x2 to compare neighboring UV direction
+            if (_data.Width < 2 || _data.Height < 2) return;
+
+            var col = BoardCollider; 
+            if (col == null) return;
+
+            // sample three points(cell centers) on the map in world space 
+            Vector3 p0 = _data.IndexToWorldCenterXZ(_data.CoordToIndex(0, 0), yOffset: 0f);
+            Vector3 pX = _data.IndexToWorldCenterXZ(_data.CoordToIndex(1, 0), yOffset: 0f);
+            Vector3 pZ = _data.IndexToWorldCenterXZ(_data.CoordToIndex(0, 1), yOffset: 0f);
+
+            // send a raycast at each point, straight down,
+            float castHeight = 50f;                              // NOTE: 50f is assumed to be enough, if board ever moves upwards significantly or is rotated, detection can fail
+            Vector3 up = Vector3.up * castHeight;
+
+            // check if each comparison point is where assumed to be 
+            bool ok0 = TryUVAtWorldPoint(col, p0 + up, out Vector2 uv0);
+            bool okX = TryUVAtWorldPoint(col, pX + up, out Vector2 uvX);
+            bool okZ = TryUVAtWorldPoint(col, pZ + up, out Vector2 uvZ);
+
+            // if everything is ok leave textures alone, otehrwise attemt to fix the mirroring problem
+            if (!ok0 || !okX || !okZ) return;
+
+            // if moving +X makes U go down, the texture should be fixed by flipping X
+            _flipTextureX = uvX.x < uv0.x;
+
+            // if moving +Z makes V go down, the texture should be fixed by flipping Y
+            _flipTextureY = uvZ.y < uv0.y;
+
+            Debug.Log($"AutoFlip: X={_flipTextureX}, Y={_flipTextureY}");
+
+            EnsureBuffers();
+        }
+
+        private static bool TryUVAtWorldPoint(Collider col, Vector3 rayOrigin, out Vector2 uv)
+        {
+            uv = default;
+
+            Ray ray = new Ray(rayOrigin, Vector3.down);
+            if (!col.Raycast(ray, out RaycastHit hit, 999f)) return false;
+
+            uv = hit.textureCoord;
+            return true;
         }
 
 
@@ -150,6 +244,7 @@ namespace AI_Workshop03
         public void FlushTexture()
         {
             _textureDirty = false;
+            EnsureTexture(); 
             RefreshTexture();
         }
 
@@ -168,8 +263,8 @@ namespace AI_Workshop03
 
             if (!_data.IsValidCellIndex(index)) return;
 
-            _data.IndexToXY(index, out int x, out int y);
-            bool odd = ((x + y) & 1) == 1;
+            _data.IndexToXY(index, out int x, out int z);
+            bool odd = ((x + z) & 1) == 1;
             _cellColors[index] = ApplyGridShading(_data.BaseCellColors[index], odd);
             _textureDirty = true;
         }
@@ -185,8 +280,8 @@ namespace AI_Workshop03
 
             if (shadeLikeGrid)
             {
-                _data.IndexToXY(index, out int coordX, out int coordY);
-                bool odd = ((coordX + coordY) & 1) == 1;
+                _data.IndexToXY(index, out int coordX, out int coordZ);
+                bool odd = ((coordX + coordZ) & 1) == 1;
                 _cellColors[index] = ApplyGridShading(color, odd);
             }
             else
@@ -218,8 +313,8 @@ namespace AI_Workshop03
 
             if (shadeLikeGrid)
             {
-                _data.IndexToXY(index, out int x, out int y);
-                bool odd = ((x + y) & 1) == 1;
+                _data.IndexToXY(index, out int x, out int z);
+                bool odd = ((x + z) & 1) == 1;
                 overlay = ApplyGridShading(overlayColor, odd);
             }
 
@@ -249,13 +344,33 @@ namespace AI_Workshop03
                 bool isReachable = (reachStamp[i] == reachStampId);
                 if (!isReachable)
                 {
-                    _data.IndexToXY(i, out int x, out int y);
-                    bool odd = ((x + y) & 1) == 1;
+                    _data.IndexToXY(i, out int x, out int z);
+                    bool odd = ((x + z) & 1) == 1;
                     _cellColors[i] = ApplyGridShading(unreachableColor, odd);
                 }
             }
 
             _textureDirty = true;
+        }
+
+        /// <summary>
+        /// NOTE: Big difference from the other color changes, this does not update the MapData and only tints the whole board! 
+        ///       used for adding effects like: highlight board red when invalid, dim board during replay, etc.  
+        /// </summary>
+        public void SetBoardOverlayTint(Color tint)
+        {
+            _boardTint = tint;
+            ApplyBoardTintToRenderer();
+        }
+
+        /// <summary>
+        /// NOTE: Big difference from the other color changes, this does not update the MapData and only tints the whole board! 
+        ///       used for adding effects like: highlight board red when invalid, dim board during replay, etc.  
+        /// </summary>
+        public void ClearBoardOverlayTint()
+        {
+            _boardTint = Color.white;
+            ApplyBoardTintToRenderer();
         }
 
 
@@ -304,6 +419,7 @@ namespace AI_Workshop03
                 }
                 else
                 {
+                    // flip both Y and X
                     for (int x = 0; x < width; x++)
                     {
                         int srcIndex = srcRowBase + x;
@@ -325,8 +441,8 @@ namespace AI_Workshop03
             int n = _data.CellCount;
             for (int i = 0; i < n; i++)
             {
-                _data.IndexToXY(i, out int x, out int y);
-                bool odd = ((x + y) & 1) == 1;
+                _data.IndexToXY(i, out int x, out int z);
+                bool odd = ((x + z) & 1) == 1;
                 _cellColors[i] = ApplyGridShading(_data.BaseCellColors[i], odd);
             }
 
@@ -361,8 +477,46 @@ namespace AI_Workshop03
             return new Color32(r, g, bl, 255);
         }
 
+        private void ApplyBoardTintToRenderer()
+        {
+            var rend = TargetRenderer;
+            if (rend == null) return;
+
+            _matPropertyBlock ??= new MaterialPropertyBlock();
+            rend.GetPropertyBlock(_matPropertyBlock);
+
+            // Apply tint for both URP and Built-in pipelines
+            _matPropertyBlock.SetColor(BaseColorId, _boardTint);
+            _matPropertyBlock.SetColor(ColorId, _boardTint);
+
+            rend.SetPropertyBlock(_matPropertyBlock);
+        }
+
 
         #endregion
+
+
+
+
+
+        private void OnDrawGizmosSelected()
+        {
+            if (_data == null) return;
+
+            // draws world bounds of the grid, should help with checking that code aligns 
+            Gizmos.color = Color.yellow;
+
+            Vector3 min = _data.MinWorld;
+            Vector3 max = _data.MaxWorld;
+
+            // builds a box centered on the grid footprint
+            Vector3 center = _data.GridCenter;
+            Vector3 size = new Vector3(max.x - min.x, 0.02f, max.z - min.z);
+
+            Gizmos.DrawWireCube(center + Vector3.up * 0.01f, size);
+        }
+
+
 
     }
 

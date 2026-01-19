@@ -139,8 +139,7 @@ namespace AI_Workshop03
 
         public void StartVisualPathFromCenter(int minManhattan = 20)
         {
-            var data = _mapManager.Data;
-            int startIndex = _mapManager.Data.CoordToIndex(data.Width / 2, data.Height / 2);
+            int startIndex = _data.CoordToIndex(_data.Width / 2, _data.Height / 2);
             if (_mapManager.TryPickRandomReachableGoal(startIndex, minManhattan, _allowDiagonals, out int goalIndex))
             {
                 StartVisualPath(startIndex, goalIndex);
@@ -206,9 +205,8 @@ namespace AI_Workshop03
             RemainingCost = 0;
             TotalPathCost = 0;
 
-            var data = _mapManager.Data;
 
-            if (!data.IsValidCellIndex(startIndex) || !data.IsValidCellIndex(goalIndex))
+            if (!_data.IsValidCellIndex(startIndex) || !_data.IsValidCellIndex(goalIndex))
             {
                 IsPathComputing = false;
                 onPathFound?.Invoke(null);
@@ -282,7 +280,7 @@ namespace AI_Workshop03
                     break;
                 }
 
-                data.IndexToXY(currentIndex, out int currentX, out int currentY);
+                _data.IndexToXY(currentIndex, out int currentX, out int currentY);
 
                 foreach (var (dx, dy, stepCost) in Neighbors8)
                 {
@@ -291,14 +289,14 @@ namespace AI_Workshop03
 
                     int newX = currentX + dx;
                     int newY = currentY + dy;
-                    if (!data.TryCoordToIndex(newX, newY, out int newIndex)) continue;
+                    if (!_data.TryCoordToIndex(newX, newY, out int newIndex)) continue;
                     if (!_mapManager.GetWalkable(newIndex)) continue;
 
                     // Disallow diagonal ONLY when BOTH orthogonal side cells are blocked.
                     if (dx != 0 && dy != 0)
                     {
-                        bool sideAOpen = data.TryCoordToIndex(currentX + dx, currentY, out int sideA) && _mapManager.GetWalkable(sideA);
-                        bool sideBOpen = data.TryCoordToIndex(currentX, currentY + dy, out int sideB) && _mapManager.GetWalkable(sideB);
+                        bool sideAOpen = _data.TryCoordToIndex(currentX + dx, currentY, out int sideA) && _mapManager.GetWalkable(sideA);
+                        bool sideBOpen = _data.TryCoordToIndex(currentX, currentY + dy, out int sideB) && _mapManager.GetWalkable(sideB);
 
                         if (!sideAOpen && !sideBOpen)
                             continue;
@@ -428,9 +426,8 @@ namespace AI_Workshop03
 
         private int Heuristic(int fromIndex, int toIndex)
         {
-            var data = _mapManager.Data;
-            data.IndexToXY(fromIndex, out int fromX, out int fromY);
-            data.IndexToXY(toIndex, out int toX, out int toY);
+            _data.IndexToXY(fromIndex, out int fromX, out int fromY);
+            _data.IndexToXY(toIndex, out int toX, out int toY);
 
             int distanceX = Math.Abs(fromX - toX);
             int distanceY = Math.Abs(fromY - toY);

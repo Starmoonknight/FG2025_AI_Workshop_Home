@@ -79,12 +79,18 @@ namespace AI_Workshop03
         */
 
 
-
+        // Board settings 
         public int Width { get; private set; }                  // Grid width in cells (X dimension)
         public int Height { get; private set; }                 // Grid height in cells (Y dimension)
         public int CellCount => Width * Height;                 // Total cells in grid (Width * Height)
-
         public int MapGenSeed { get; private set; }             // Seed that was used to generate this map stored MapData  (0 = random)
+        public int BuildId { get; private set; }                // What generation is this map 
+
+        public float CellTileSize { get; private set; }         // The size of one cell on this map
+        public Vector3 GridOriginWorld { get; private set; }    // World space placement, the bottom-left map corner is center minus half-dimensions: origin = center - (Width/2, Height/2)
+        public Vector3 MinWorld { get; private set; }           // Bounds / World-space rectangle that the grid occupies
+        public Vector3 MaxWorld { get; private set; }           // Bounds / World-space rectangle that the grid occupies
+        public Vector3 GridCenter { get; private set; }         // Center of the map
 
 
         // Base defaults (NOT per-cell). These are used to reset the map and define "empty baseline state".
@@ -122,40 +128,72 @@ namespace AI_Workshop03
             if (width == Width && height == Height && IsBlocked != null)
                 return;
 
-            Width = width;
-            Height = height;
+            Width = Mathf.Max(1, width);
+            Height = Mathf.Max(1, height);
 
             int n = width * height;
 
-            //Protected = new bool[count];
-            IsBlocked = new bool[n];
-            TerrainTypeIds = new byte[n];
-            TerrainCosts = new int[n];
-            BaseCellColors = new Color32[n];
-            LastPaintLayerIds = new byte[n];
-        }
+            // Allocate only when needed:
+            if (IsBlocked == null || IsBlocked.Length != n)
+                IsBlocked = new bool[n];
 
+            if (TerrainTypeIds == null || TerrainTypeIds.Length != n)
+                TerrainTypeIds = new byte[n];
+
+            if (TerrainCosts == null || TerrainCosts.Length != n)
+                TerrainCosts = new int[n];
+
+            if (BaseCellColors == null || BaseCellColors.Length != n)
+                BaseCellColors = new Color32[n];
+
+            if (LastPaintLayerIds == null || LastPaintLayerIds.Length != n)
+                LastPaintLayerIds = new byte[n];
+
+            //if (Protected == null || Protected.Length != n)
+            //    Protected = new bool[n];
+        }
 
         /// <summary>
         /// Clears/resets all truth arrays to a default base state WITHOUT reallocating.
         /// </summary>
-        public void ResetToBase(int width, int height, byte baseTerrainKind, int baseTerrainCost, Color32 baseTerrainColor)
+        public void InitializeToBase(int width, int height, byte baseTerrainKind, int baseTerrainCost, Color32 baseTerrainColor)
         {
             Resize(width, height);
             SetBaseTerrainCost(baseTerrainCost);
             SetBaseTerrainKind(baseTerrainKind);
             SetBaseTerrainColor(baseTerrainColor);
 
+            ResetCellsToBase();
+        }
+
+        public void ResetCellsToBase()
+        {
             int n = CellCount;
             for (int i = 0; i < n; i++)
             {
                 IsBlocked[i] = false;
-                TerrainTypeIds[i] = baseTerrainKind;
-                TerrainCosts[i] = baseTerrainCost;
-                BaseCellColors[i] = baseTerrainColor;
+                TerrainTypeIds[i] = BaseTerrainType;
+                TerrainCosts[i] = BaseTerrainCost;
+                BaseCellColors[i] = BaseTerrainColor;
                 LastPaintLayerIds[i] = 0;
             }
         }
+
+
+        public void SetMapMeta(int buildId, int mapGenSeed, Vector3 gridOriginWorld, float cellTileSize)
+        {
+            BuildId = Mathf.Max(0, buildId);
+            MapGenSeed = mapGenSeed;
+
+            GridOriginWorld = gridOriginWorld;
+            CellTileSize = Mathf.Max(1e-4f, cellTileSize);
+
+            // Derived world bounds
+            MinWorld = GridOriginWorld;
+            MaxWorld = GridOriginWorld + new Vector3(Width * CellTileSize, 0f, Height * CellTileSize);
+            GridCenter = (MinWorld + MaxWorld) * 0.5f; 
+        }
+
 
 
 
@@ -163,11 +201,6 @@ namespace AI_Workshop03
         private void SetBaseTerrainKind(byte type) => BaseTerrainType = type;
         private void SetBaseTerrainColor(Color32 color) => BaseTerrainColor = color;
 
-
-        // Can seed be a negative? - how will that interact with code
-        // Should I use guards? - min/ max value
-        // Should I use uint? - problems with showing some var types in the inspector might interfere, also what size of seed do I want/get? 
-        public void SetMapGenSeed(int seed) => MapGenSeed = seed;
 
 
 
@@ -206,21 +239,23 @@ namespace AI_Workshop03
 
         public Vector3 IndexToWorldCenterXZ(int index, float yOffset = 0f)
         {
+
             IndexToXY(index, out int x, out int z);
-            return new Vector3(x + 0.5f, yOffset, z + 0.5f);
+
+            float wx = GridOriginWorld.x + (x + 0.5f) * CellTileSize;
+            float wz = GridOriginWorld.z + (z + 0.5f) * CellTileSize;
+
+            return new Vector3(wx, yOffset, wz);
         }
 
         // NEW
         public bool TryWorldToCoordXZ(Vector3 worldPos, out int x, out int y)
         {
-            // NOTE: Here it is assumed:
-            // - Cell size = 1 unit
-            // - Grid origin = (0,0) in world space
-            //
-            // IF THIS CHANGES -> must update,    shoulp probably set this to be a stored value from MapManager later anyways 
+            float localX = (worldPos.x - GridOriginWorld.x) / CellTileSize;
+            float localZ = (worldPos.z - GridOriginWorld.z) / CellTileSize;
 
-            x = Mathf.FloorToInt(worldPos.x);
-            y = Mathf.FloorToInt(worldPos.z);
+            x = Mathf.FloorToInt(localX);
+            y = Mathf.FloorToInt(localZ);
 
             return IsValidCellCoord(x, y);
         }

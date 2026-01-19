@@ -34,6 +34,8 @@ namespace AI_Workshop03
         private int _goalIndex = -1;
         private const int MaxPickAttempts = 64;
 
+        private MapData _data; 
+
         private void Awake()
         {
             if (_mapManager == null) _mapManager = FindFirstObjectByType<MapManager>();
@@ -42,6 +44,21 @@ namespace AI_Workshop03
             transform.rotation = Quaternion.identity;
             transform.localScale = new Vector3(Mathf.Abs(transform.localScale.x), Mathf.Abs(transform.localScale.y), Mathf.Abs(transform.localScale.z));
 
+        }
+
+        private void OnEnable()
+        {
+            if (_mapManager == null) return;
+
+            _mapManager.OnMapRebuilt += HandleMapRebuilt;
+
+            if (_mapManager.Data != null)
+                HandleMapRebuilt(_mapManager.Data);
+        }
+
+        private void OnDisable()
+        {
+            if (_mapManager != null) _mapManager.OnMapRebuilt -= HandleMapRebuilt;
         }
 
         private void Start()
@@ -55,20 +72,26 @@ namespace AI_Workshop03
             StepMovement();
         }
 
+        private void HandleMapRebuilt(MapData data)
+        {
+            _data = data;
+
+            ResetPathState();
+        }
+
 
 
 
         #region API
 
-        // NEW
         public void RequestPath(int startIndex, int goalIndex)
         {
-            if (!_mapManager.Data.IsValidCellIndex(startIndex) || _mapManager.Data.IsBlocked[startIndex])
+            if (!_data.IsValidCellIndex(startIndex) || _data.IsBlocked[startIndex])
             {
                 Debug.LogWarning($"AgentMover: RequestPath startIndex {startIndex} is not a valid cell on the map).");
                 return;
             }
-            if (!_mapManager.Data.IsValidCellIndex(goalIndex) || _mapManager.Data.IsBlocked[goalIndex])
+            if (!_data.IsValidCellIndex(goalIndex) || _data.IsBlocked[goalIndex])
             {
                 Debug.LogWarning($"AgentMover: RequestPath goalIndex {goalIndex} is not a valid cell on the map).");
                 return;
@@ -83,7 +106,6 @@ namespace AI_Workshop03
             StartPath(startIndex, goalIndex);
         }
 
-        // NEW
         public void StartNewRandomPath()
         {
             // Random start + random reachable goal
@@ -108,11 +130,10 @@ namespace AI_Workshop03
             Debug.LogWarning("AgentMover: Could not find a valid start+goal pair (try fewer obstacles or lower minManhattan).");
         }
 
-        // NEW
         public void RequestPathFrom(int startIndex)
         {
             // Fixed start + random reachable goal
-            if (!_mapManager.Data.IsValidCellIndex(startIndex) || _mapManager.Data.IsBlocked[startIndex])
+            if (!_data.IsValidCellIndex(startIndex) || _data.IsBlocked[startIndex])
             {
                 Debug.LogWarning($"AgentMover: RequestPathFrom startIndex {startIndex} is not a valid cell on the map).");
                 return;
@@ -136,13 +157,12 @@ namespace AI_Workshop03
             Debug.LogWarning("AgentMover: Could not find a valid start+goal pair (try fewer obstacles or lower minManhattan).");
         }
 
-        // NEW
         // Uses TryPickRandomReachableOther(goal -> start), truly random pick
         // Not really faster in big-O than _SpawnBiased, but might need fewer attempts, 
         public void RequestPathTo_Fast(int goalIndex, bool startFromCurrentPos = false)
         {
             // Random start + fixed goal
-            if (!_mapManager.Data.IsValidCellIndex(goalIndex) || _mapManager.Data.IsBlocked[goalIndex])
+            if (!_data.IsValidCellIndex(goalIndex) || _data.IsBlocked[goalIndex])
             {
                 Debug.LogWarning($"AgentMover: RequestPathTo goalIndex {goalIndex} is not a valid cell on the map).");
                 return;
@@ -158,17 +178,17 @@ namespace AI_Workshop03
             {
                 transform.position = WorldFromIndex(startIndex);
                 StartPath(startIndex, goalIndex);
+                return; 
             }
 
             Debug.LogWarning("AgentMover: RequestPathTo_Fast could not find a reachable start for that goal.");
         }
 
-        // NEW
         //Uses TryPickPoint + TryValidateReachablePair, biased to pick a point along that edge (top/bottom/left/right)
         public void RequestPathTo_SpawnBiased(int goalIndex, bool startFromCurrentPos = false)
         {
             // Random start + fixed goal
-            if (!_mapManager.Data.IsValidCellIndex(goalIndex) || _mapManager.Data.IsBlocked[goalIndex])
+            if (!_data.IsValidCellIndex(goalIndex) || _data.IsBlocked[goalIndex])
             {
                 Debug.LogWarning($"AgentMover: RequestPathTo goalIndex {goalIndex} is not a valid cell on the map).");
                 return;
@@ -236,7 +256,6 @@ namespace AI_Workshop03
 
         #region Internal API-Helpers
 
-        // NEW
         private void StartPath(int startIndex, int goalIndex)
         {
             _startIndex = startIndex;
@@ -249,7 +268,6 @@ namespace AI_Workshop03
             );
         }
 
-        // NEW
         private bool EnsureCanRequestPath(bool allowInteruptPath = false)
         {
             if (_mapManager == null || _navigationService == null) return false;
@@ -263,14 +281,13 @@ namespace AI_Workshop03
             return true;
         }
 
-        // NEW
         private void ResetPathState()
         {
             _pathIndices = null;
             _pathCursor = 0;
         }
 
-        // NEW - Pick either a random index or checks an index provied is valid 
+        // Pick either a random index or checks an index provied is valid 
         private bool TryPickPoint(out int index, int? haveIndex = null)
         {
             index = -1;
@@ -278,8 +295,8 @@ namespace AI_Workshop03
             if (haveIndex.HasValue)
             {
                 int idx = haveIndex.Value;
-                if (!_mapManager.Data.IsValidCellIndex(idx)) return false;
-                if (_mapManager.Data.IsBlocked[idx]) return false; // important!
+                if (!_data.IsValidCellIndex(idx)) return false;
+                if (_data.IsBlocked[idx]) return false; // important!
                 index = idx;
                 return true;
             }
@@ -287,7 +304,6 @@ namespace AI_Workshop03
             return TryPickRandomWalkableCell(out index);
         }
 
-        // NEW 
         // If provided haveOtherIndex, it validates reachability pair
         // Else it picks a random reachable target using MapManager goal picker
         private bool TryPickRandomReachableOther(int anchorIndex, int minManhattan, out int otherIndex, int? haveOtherIndex = null)
@@ -316,16 +332,20 @@ namespace AI_Workshop03
 
         private bool CanUseAgentPos(int goalIndex)
         {
-            if (_mapManager.Data.TryWorldToIndexXZ(transform.position, out int currentStartIdx)
-                    && !_mapManager.Data.IsBlocked[currentStartIdx]
-                    && _mapManager.TryValidateReachablePair(currentStartIdx, goalIndex, _navigationService.AllowDiagonals))
-            {
-                transform.position = WorldFromIndex(currentStartIdx);
-                StartPath(currentStartIdx, goalIndex);
-                return true;
-            }
+            var data = _data;
 
-            return false;
+            if (!data.TryWorldToIndexXZ(transform.position, out int currentStartIdx))
+                return false;
+
+            if (data.IsBlocked[currentStartIdx])
+                return false;
+
+            if (!_mapManager.TryValidateReachablePair(currentStartIdx, goalIndex, _navigationService.AllowDiagonals))
+                return false;
+
+            transform.position = WorldFromIndex(currentStartIdx);
+            StartPath(currentStartIdx, goalIndex);
+            return true;
         }
 
 
@@ -372,11 +392,11 @@ namespace AI_Workshop03
         {
             index = -1;
 
-            int cellCount = _mapManager.Data.CellCount;
+            int cellCount = _data.CellCount;
             if (cellCount <= 0) return false;
 
-            int w = _mapManager.Width;
-            int h = _mapManager.Height;
+            int w = _data.Width;
+            int h = _data.Height;
 
             int ringMax = Mathf.Max(1, Mathf.Min(w, h) / 2);
             ringThickness = Mathf.Clamp(ringThickness, 1, ringMax);
@@ -394,8 +414,8 @@ namespace AI_Workshop03
 
                 if (!inRing) continue;
 
-                int candidate = _mapManager.Data.CoordToIndex(x, y);
-                if (_mapManager.GetWalkable(candidate))
+                int candidate = _data.CoordToIndex(x, y);
+                if (!_data.IsBlocked[candidate])
                 {
                     index = candidate;
                     return true;
@@ -405,8 +425,8 @@ namespace AI_Workshop03
             // fallback, anywhere
             for (int t = 0; t < tries; t++)
             {
-                int candidate = UnityEngine.Random.Range(0, _mapManager.Data.CellCount);
-                if (_mapManager.GetWalkable(candidate))
+                int candidate = UnityEngine.Random.Range(0, _data.CellCount);
+                if (!_data.IsBlocked[candidate])
                 {
                     index = candidate;
                     return true;
@@ -418,8 +438,8 @@ namespace AI_Workshop03
 
         private int ComputeMinManhattan()
         {
-            int w = _mapManager.Width;
-            int h = _mapManager.Height;
+            int w = _data.Width;
+            int h = _data.Height;
 
             int scaled = Mathf.RoundToInt((w + h) * _minManhattanFactor);
             return Mathf.Clamp(scaled, _minManhattanClampMin, _minManhattanClampMax);
@@ -427,7 +447,7 @@ namespace AI_Workshop03
 
         private Vector3 WorldFromIndex(int index)
         {
-            return _mapManager.Data.IndexToWorldCenterXZ(index, _agentPlaneOffsetY);
+            return _data.IndexToWorldCenterXZ(index, _agentPlaneOffsetY);
         }
 
 

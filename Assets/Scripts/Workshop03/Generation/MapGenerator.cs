@@ -21,9 +21,8 @@ namespace AI_Workshop03
         public bool Debug_DumpFocusWeightsVerbose { get; set; } = false;
 
 
-        private MapGenDebugReporter _debugReporter;
-        private MapGenDebugReporter DebugReporter
-            => _debugReporter ??= new MapGenDebugReporter();
+        private static readonly MapGenDebugReporter _debugReporter = new MapGenDebugReporter();
+
 
 
 
@@ -44,6 +43,10 @@ namespace AI_Workshop03
             Func<int, int> buildReachableFrom   // callback into BoardManager
         )
         {
+
+            _attemptsThisBuild = 0;
+            _usedFallbackThisBuild = false;
+
 
             // --- Get reference pointers to current game board ---
 
@@ -82,14 +85,7 @@ namespace AI_Workshop03
 
             _maxBlockedBudget = _cellCount - minWalkableCells;
 
-
-            // --- Generate Debug Data  ---
-
-            if (Debug_DumpFocusWeights)
-                DebugReporter.DumpFocusWeights(seed, _width, _height, terrainData, Debug_DumpFocusWeightsVerbose, areaWeights => ComputeInteriorMarginCells(in areaWeights));
-
-
-
+                       
             // --- Organize all terrains in use  ---
 
             var obstaclesList = new List<TerrainTypeData>(terrainData.Length);
@@ -130,10 +126,12 @@ namespace AI_Workshop03
 
             int startIndex = CoordToIndex(_width / 2, _height / 2);
 
-            // --- Atempt to generate base game map ---
+            // --- Attempt to generate base game map ---
             for (int attempt = 0; attempt < Math.Max(1, maxGenerateAttempts); attempt++)    // attempt placement loop
             {
                 ResetToBase();
+                _attemptsThisBuild++;
+                
 
                 for (int i = 0; i < obstaclesList.Count; i++)                               // obstacle placement before other terrain types
                 {
@@ -157,21 +155,24 @@ namespace AI_Workshop03
                 }
 
 
-
                 // if it fails, generate a new map. 
 
                 int walkableCount = CountWalkable();
-                if (walkableCount <= 0) continue;
+                if (walkableCount <= 0) continue;                                   // early out map failed generating.
+                                                                                    // NOTE: current design stops map from starting as fully blocked
 
                 float unblockedPercent = walkableCount / (float)_cellCount;
-                if (unblockedPercent < minUnblocked) continue;                        // make sure map don't have to many obstacles placed
+                if (unblockedPercent < minUnblocked) continue;                      // If map has to many obstacles placed, fail and try again
 
                 int reachableCount = buildReachableFrom(startIndex);
                 float reachablePercent = reachableCount / (float)walkableCount;
 
-                if (reachablePercent >= minReachablePercent)
+
+                if (reachablePercent >= minReachablePercent)                        // If map does not meat walkable space requirement, fail and try again
                 {
-                    ResetWalkableToBaseOnly();                                              // reset walkable tiles to base visuals/cost/id so terrain can build from clean base
+                    // --- Successful Generation Branch ---                         // The generated map fullfils base requirements, continue to finnishing touches 
+
+                    ResetWalkableToBaseOnly();                                      // reset walkable tiles to base visuals/cost/id so terrain can build from clean base
 
                     for (int i = 0; i < walkablesList.Count; i++)
                     {
@@ -184,12 +185,40 @@ namespace AI_Workshop03
                         ApplyTerrainData(terrain, id, isObstacle: false);
                     }
 
+                    // --- Generate Debug Data  ---
+                    if (Debug_DumpFocusWeights)
+                    {
+                        _debugReporter.DumpFocusWeights(
+                            seed, _width, _height, terrainData,
+                            Debug_DumpFocusWeightsVerbose,
+                            areaWeights => ComputeInteriorMarginCells(in areaWeights),
+                            totalAttemptedBuilds: _attemptsThisBuild,
+                            totalFallbackBuilds: _usedFallbackThisBuild ? 1 : 0
+                        );
+                    }
                     return;
                 }
             }
 
+
             // --- Fallback if to many attempts, keep last version and ensure walkable visuals are consistent ---
             ResetWalkableToBaseOnly();
+            _usedFallbackThisBuild = true;
+
+
+            // --- Generate Debug Data  ---
+            if (Debug_DumpFocusWeights)
+            {
+                _debugReporter.DumpFocusWeights(
+                    seed, _width, _height, terrainData,
+                    Debug_DumpFocusWeightsVerbose,
+                    areaWeights => ComputeInteriorMarginCells(in areaWeights),
+                    totalAttemptedBuilds: _attemptsThisBuild,
+                    totalFallbackBuilds: 1
+                );
+            }
+
+
             for (int i = 0; i < walkablesList.Count; i++)
             {
                 var terrain = walkablesList[i];
@@ -199,6 +228,8 @@ namespace AI_Workshop03
                     continue;
 
                 ApplyTerrainData(terrain, id, isObstacle: false);
+
+
             }
         }
 

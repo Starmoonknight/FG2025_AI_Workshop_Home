@@ -17,11 +17,21 @@ namespace AI_Workshop03
             int height,
             TerrainTypeData[] terrainData,
             bool verbose,
-            Func<TerrainTypeData.AreaFocusWeights, int> computeInteriorMarginCells)
+            Func<TerrainTypeData.AreaFocusWeights, int> computeInteriorMarginCells,
+            int totalAttemptedBuilds = -1,  // deafault -1 for not provided
+            int totalFallbackBuilds = -1)   // deafault -1 for not provided
         {
 
             var stringBuilder = new StringBuilder(2048);
             stringBuilder.AppendLine($"[MapGen Focus Weights] seed={seed} size={width}x{height} terrains={terrainData?.Length ?? 0}");
+
+            if (totalAttemptedBuilds >= 0 || totalFallbackBuilds >= 0)
+            {
+                stringBuilder.AppendLine(
+                    $"  buildStats: attemptsTotal={(totalAttemptedBuilds >= 0 ? totalAttemptedBuilds.ToString() : "n/a")} " +
+                    $"fallbacksTotal={(totalFallbackBuilds >= 0 ? totalFallbackBuilds.ToString() : "n/a")}"
+                );
+            }
 
             if (terrainData == null || terrainData.Length == 0)
             {

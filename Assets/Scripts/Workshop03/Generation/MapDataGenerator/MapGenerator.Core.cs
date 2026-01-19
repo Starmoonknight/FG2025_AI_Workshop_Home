@@ -24,7 +24,7 @@ namespace AI_Workshop03
     public sealed partial class MapDataGenerator
     {
 
-        //Generator fields
+        // Generator data fields
         private readonly GenScratch _scratch = new();
         private int _width;
         private int _height;
@@ -46,6 +46,15 @@ namespace AI_Workshop03
         // Rng instances
         private System.Random _rng;
         private System.Random _rngOrder;
+
+
+        // Generation trackers 
+        private int _attemptsThisBuild = 0;
+        private bool _usedFallbackThisBuild;
+
+        public int AttemptsLastBuild => _attemptsThisBuild;
+        public bool UsedFallbackLastBuild => _usedFallbackThisBuild;
+
 
 
         // Neighbor direction offsets

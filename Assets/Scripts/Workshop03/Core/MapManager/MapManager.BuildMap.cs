@@ -37,7 +37,7 @@ namespace AI_Workshop03
             _goalRng = new System.Random(goalSeed);
 
             // Reset truth arrays to base state for a fresh generation   (walkable land, cost 10    /or whatever _baseTerrainCost is)
-            _data.ResetToBase(
+            _data.InitializeToBase(
                 width: _width,
                 height: _height,
                 baseTerrainKind: (byte)TerrainID.Land,
@@ -71,23 +71,30 @@ namespace AI_Workshop03
 
             RecomputeMinTerrainCost();  // after terrain costs are set compute minimum traversal cost possible on this map
 
-            // Scale plane to match grid world size (X = width, Z = height)
-            _boardRenderer.transform.localScale = new Vector3(_data.Width / UNITY_PLANE_SIZE, 1f, _data.Height / UNITY_PLANE_SIZE);
+            // Board placement in world space
+            float worldW = _data.Width * _cellTileSize;
+            float worldH = _data.Height * _cellTileSize;
+
+            // Scale plane to match grid world size, X = width, Z = height  (Unity Plane is 10x10 at scale 1)
+            _boardRenderer.transform.localScale = new Vector3(worldW / UNITY_PLANE_SIZE, 1f, worldH / UNITY_PLANE_SIZE);
 
             // Center = world coords can run 0,0
-            _boardRenderer.transform.position = new Vector3(_data.Width * 0.5f, 0f, _data.Height * 0.5f);   // Center the quad, works in XZ plane
+            _boardRenderer.transform.position = new Vector3(worldW * 0.5f, 0f, worldH * 0.5f);   // Center the plane, works in XZ plane
             _boardRenderer.transform.rotation = Quaternion.identity;
 
+            // Increment how many maps have been built
+            _mapBuildId++;
 
-            // THIS PART IS BROKERN, maybe fixed part of it
-            // but need to fully implement later
-            /*
+            // Grid origin is bottom left corner in world space
+            Vector3 gridOrigin = _boardRenderer.transform.position - new Vector3(worldW * 0.5f, 0f, worldH * 0.5f);
 
-            // Temp placeholder location!
-            if (_worldObjects != null)
-                _worldObjects.RebuildObstacleCubes(_data);
+            _data.SetMapMeta(
+                buildId: _mapBuildId,
+                mapGenSeed: baseSeed,
+                gridOriginWorld: gridOrigin,
+                cellTileSize: _cellTileSize
+                );
 
-            */
 
             FitCameraOrthoTopDown();
             
@@ -141,16 +148,18 @@ namespace AI_Workshop03
 
             _mainCamera.orthographic = true;
 
-            // Center of the board in world space (Quad centered at its transform)
-            Vector3 center = _boardRenderer.transform.position;
+            Vector3 center = _data.GridCenter;
 
             // Place camera above the board (a top down XZ plane view)
             _mainCamera.transform.rotation = Quaternion.Euler(90f, 0f, 0f);
-            _mainCamera.transform.position = center + new Vector3(0f, 20f, 0f);
+            _mainCamera.transform.position = center + Vector3.up * 20f;
 
-            // Fit whole board in view
-            float halfH = _height * 0.5f;       // Z-size half
-            float halfW = _width * 0.5f;        // X-size half
+            // World footprint sizes
+            float worldW = _data.MaxWorld.x - _data.MinWorld.x;  // X size in world units
+            float worldH = _data.MaxWorld.z - _data.MinWorld.z;  // Z size in world units
+
+            float halfW = worldW * 0.5f;
+            float halfH = worldH * 0.5f;
 
             float aspect = _mainCamera.aspect; // width / height
             float sizeToFitHeight = halfH;

@@ -12,7 +12,7 @@ namespace AI_Workshop03.Editor
     public sealed class TerrainTypeDataEditor : UnityEditor.Editor
     {
         // Top level fields
-        private SerializedProperty _displayName, _visualPrefab, _color, _cost;
+        private SerializedProperty _displayName, _visualPrefab, _color, _colorToTintPrefab, _cost;
         private SerializedProperty _terrainID, _isObstacle, _forceUnblockedSeed;
 
         private SerializedProperty _mode, _coveragePercent;
@@ -73,6 +73,7 @@ namespace AI_Workshop03.Editor
             _displayName = serializedObject.FindProperty(nameof(TD.DisplayName));
             _visualPrefab = serializedObject.FindProperty(nameof(TD.VisualPrefab));
             _color = serializedObject.FindProperty(nameof(TD.Color));
+            _colorToTintPrefab = serializedObject.FindProperty(nameof(TD.ColorToTintPrefab));
             _cost = serializedObject.FindProperty(nameof(TD.Cost));
 
             _terrainID = serializedObject.FindProperty(nameof(TD.TerrainID));
@@ -170,6 +171,7 @@ namespace AI_Workshop03.Editor
                 EditorGUILayout.PropertyField(_displayName);
                 EditorGUILayout.PropertyField(_visualPrefab);
                 EditorGUILayout.PropertyField(_color);
+                EditorGUILayout.PropertyField(_colorToTintPrefab);
                 EditorGUILayout.PropertyField(_cost);
             }
             EditorGUILayout.EndFoldoutHeaderGroup();

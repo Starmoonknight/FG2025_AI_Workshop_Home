@@ -1,4 +1,3 @@
-using AI_Workshop02;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
@@ -8,22 +7,24 @@ namespace AI_Workshop03
 
     public sealed class MapInputController : MonoBehaviour
     {
+        [SerializeField] private Camera _cam;
         [SerializeField] private MapManager _mapManager;
-        [SerializeField] private Renderer _groundRenderer; 
         [SerializeField] private SteeringAgent _agent;
 
         [SerializeField] private Transform _goalMarker;
         [SerializeField] private InputAction _click;
-        [SerializeField] private Camera _cam;
 
         private MapData _data;
         private Collider _groundCollider;
-        
+
+        private Renderer GroundRenderer => _mapManager != null ? _mapManager.BoardRenderer : null;
+
 
         private void Awake()
         {
             if (_mapManager == null) _mapManager = FindFirstObjectByType<MapManager>();
-            if (_groundRenderer != null) _groundCollider = _groundRenderer.GetComponent<Collider>();
+            
+            if (GroundRenderer != null) _groundCollider = GroundRenderer.GetComponent<Collider>();
         }
 
         private void OnEnable()
@@ -32,7 +33,7 @@ namespace AI_Workshop03
             _click.performed += OnClick;
             _click.Enable();
 
-            if (_groundRenderer != null) _groundCollider = _groundRenderer.GetComponent<Collider>();
+            if (GroundRenderer != null) _groundCollider = GroundRenderer.GetComponent<Collider>();
 
             if (_mapManager == null) return;
 
@@ -73,7 +74,7 @@ namespace AI_Workshop03
         private void HandleMapRebuilt(MapData data)
         {
             _data = data;
-            if (_groundRenderer != null) _groundCollider = _groundRenderer.GetComponent<Collider>();
+            if (GroundRenderer != null) _groundCollider = GroundRenderer.GetComponent<Collider>();
         }
 
 
@@ -94,29 +95,51 @@ namespace AI_Workshop03
             if (_agent != null) _agent.StartNewRandomPath();
         }
 
-        private void OnClick(InputAction.CallbackContext _)
+        private void OnClick(InputAction.CallbackContext ctx)
         {
-            if (_mapManager == null || _goalMarker == null) return;
-            if (_cam == null) _cam = Camera.main;
-            if (_cam == null) return;
-            
+            if (_mapManager == null || _goalMarker == null) return;      
             if (_data == null) return;
 
+            if (!TryGetMouseGroundHit(out var hit)) return;
+            if (!TryHitToBoardIndex(hit, out int goalIndex)) return;
+            if (_data.IsBlocked[goalIndex]) return;
+
+            _goalMarker.position = _data.IndexToWorldCenterXZ(goalIndex, yOffset: 0f) + Vector3.up * 0.1f;
+            Debug.Log($"Clicked goalIndex={goalIndex}");
+
+            if (_agent != null)
+                _agent.RequestPathTo_SpawnBiased(goalIndex, startFromCurrentPos: true);
+        }
+
+
+
+
+
+        private bool TryHitToBoardIndex(in RaycastHit hit, out int index)
+        {
+            index = -1;
+
+            if (_data == null) return false;
+            if (hit.collider != _groundCollider) return false;
+
+            // world-space conversion using MapData origin + cell size
+            return _data.TryWorldToIndexXZ(hit.point, out index);
+        }
+
+        private bool TryGetMouseGroundHit(out RaycastHit hit)
+        {
+            hit = default;
+
+            if (_cam == null) _cam = Camera.main;
+            if (_cam == null) return false;
 
             Ray ray = _cam.ScreenPointToRay(Mouse.current.position.ReadValue());
-            if (!Physics.Raycast(ray, out RaycastHit hit, 500f)) return;
+            if (!Physics.Raycast(ray, out hit, 500f)) return false;
 
-            if (hit.collider != _groundCollider) return;
-
-            Vector2 uv = hit.textureCoord;
-            int x = Mathf.Clamp(Mathf.FloorToInt(uv.x * _mapManager.Width), 0, _mapManager.Width - 1);
-            int z = Mathf.Clamp(Mathf.FloorToInt(uv.y * _mapManager.Height), 0, _mapManager.Height - 1);
-
-            if (!_data.TryCoordToIndex(x, z, out int idx)) return;
-            if (!_mapManager.GetWalkable(idx)) return;
-
-            _goalMarker.position = _data.IndexToWorldCenterXZ(idx, yOffset: 0f) + Vector3.up * 0.1f;
+            return hit.collider == _groundCollider;
         }
+
+
 
     }
 

@@ -22,6 +22,8 @@ namespace AI_Workshop03
         [SerializeField, Min(1)] private int _width = 10;
         [SerializeField, Min(1)] private int _height = 10;
         [SerializeField, Min(1)] private int _baseTerrainCost = 10;
+        
+        private float _cellTileSize = 1f;
 
         /*
          * 
@@ -52,7 +54,7 @@ namespace AI_Workshop03
         [SerializeField] private TerrainTypeData[] _terrainData;
 
         private readonly MapDataGenerator _generator = new MapDataGenerator();
-
+        private int _mapBuildId = 0;
 
         [SerializeField] private MapRenderer2D _renderer2D;
         [SerializeField] private MapWorldObjects _worldObjects;
@@ -68,12 +70,13 @@ namespace AI_Workshop03
         private Color32 _unReachableColor = new(255, 150, 150, 255);    // Light Red
 
 
-        public int Width => _width;
-        public int Height => _height;
-        public int BaseTerrainCost => _baseTerrainCost;
         public int MinTerrainCost => _minTerrainCost;
         public int LastGeneratedSeed => _lastGeneratedSeed;
         public MapData Data => _data;
+        public TerrainTypeData[] TerrainRules => _terrainData; 
+        public Renderer BoardRenderer => _boardRenderer;
+        public Collider BoardCollider => _boardRenderer != null ? _boardRenderer.GetComponent<Collider>() : null;
+
 
 
 
