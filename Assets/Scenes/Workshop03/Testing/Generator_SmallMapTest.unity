@@ -671,6 +671,7 @@ GameObject:
   m_Component:
   - component: {fileID: 925457159}
   - component: {fileID: 925457160}
+  - component: {fileID: 925457161}
   - component: {fileID: 925457158}
   m_Layer: 0
   m_Name: Map Manager
@@ -761,6 +762,35 @@ MonoBehaviour:
   _autoDetectFlip: 1
   _flipTextureX: 1
   _flipTextureY: 1
+--- !u!114 &925457161
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 925457157}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 20c0119d0daee6f4d801f9a5d67db39b, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::AI_Workshop03.MapWorldObjects
+  _mapManager: {fileID: 925457158}
+  _fallbackCubePrefab: {fileID: 0}
+  _worldRoot: {fileID: 1671115094}
+  _worldVisualsLayer: 8
+  _obstaclesBlockPhysics: 1
+  _prewarmPools: 1
+  _prewarmPerPrefab: 64
+  _prewarmFallbackCount: 256
+  _prewarmPerFrame: 50
+  _yOffset: 0
+  _spawnForObstacles: 1
+  _tintFallbackCube: 1
+  _useSafetyLimit: 1
+  _maxActiveWorldObjects: 20000
+  _abortRebuildIfOverCap: 1
+  _maxNewInstantiatesPerRebuild: 2000
+  _maxRebuildMs: 120
 --- !u!1 &1352866326
 GameObject:
   m_ObjectHideFlags: 0
@@ -1099,7 +1129,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AI_Workshop03.SteeringAgent
   _agentPlaneOffsetY: 0.5
-  _navigationService: {fileID: 0}
+  _navigationService: {fileID: 402172771}
   _mapManager: {fileID: 925457158}
   _speed: 10
   _waypointRadius: 0.05

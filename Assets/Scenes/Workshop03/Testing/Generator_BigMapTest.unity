@@ -516,7 +516,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::AI_Workshop03.MapInputController
   _cam: {fileID: 1352866328}
   _mapManager: {fileID: 925457158}
-  _agent: {fileID: 2647801867824992716}
+  _agent: {fileID: 0}
   _goalMarker: {fileID: 2070732536}
   _click:
     m_Name: Click
@@ -732,72 +732,6 @@ MonoBehaviour:
   _autoDetectFlip: 1
   _flipTextureX: 1
   _flipTextureY: 1
---- !u!1 &933149810
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 933149812}
-  - component: {fileID: 933149811}
-  m_Layer: 0
-  m_Name: PathfindingManager
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!114 &933149811
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 933149810}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 001ef7c1cafe5de41b321da3d29e9c0b, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::AI_Workshop03.NavigationServiceManager
-  _mapManager: {fileID: 925457158}
-  _mapRenderer2D: {fileID: 925457160}
-  _allowDiagonals: 1
-  _searchDelay: 0.01
-  _pathDelay: 0.005
-  _spreadOverlayStrength: 0.35
-  _pathOverlayStrength: 0.5
-  _triedColor:
-    serializedVersion: 2
-    rgba: 4294901945
-  _frontierColor:
-    serializedVersion: 2
-    rgba: 4294932660
-  _pathColor:
-    serializedVersion: 2
-    rgba: 4279886086
-  _startColor:
-    serializedVersion: 2
-    rgba: 4294967040
-  _goalColor:
-    serializedVersion: 2
-    rgba: 4278255615
---- !u!4 &933149812
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 933149810}
-  serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1352866326
 GameObject:
   m_ObjectHideFlags: 0
@@ -1028,97 +962,6 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!1001 &2647801867824992714
-PrefabInstance:
-  m_ObjectHideFlags: 0
-  serializedVersion: 2
-  m_Modification:
-    serializedVersion: 3
-    m_TransformParent: {fileID: 0}
-    m_Modifications:
-    - target: {fileID: 1133412920460122527, guid: 58b54d617e751b140b7a6d03bc5446bc, type: 3}
-      propertyPath: 'm_Materials.Array.data[0]'
-      value: 
-      objectReference: {fileID: 2100000, guid: 1e8880bac8c65404d909eaa0a941b94f, type: 2}
-    - target: {fileID: 1668245068365282562, guid: 58b54d617e751b140b7a6d03bc5446bc, type: 3}
-      propertyPath: m_Name
-      value: Agent
-      objectReference: {fileID: 0}
-    - target: {fileID: 6473578431290561273, guid: 58b54d617e751b140b7a6d03bc5446bc, type: 3}
-      propertyPath: m_LocalPosition.x
-      value: -70.3
-      objectReference: {fileID: 0}
-    - target: {fileID: 6473578431290561273, guid: 58b54d617e751b140b7a6d03bc5446bc, type: 3}
-      propertyPath: m_LocalPosition.y
-      value: 0.5
-      objectReference: {fileID: 0}
-    - target: {fileID: 6473578431290561273, guid: 58b54d617e751b140b7a6d03bc5446bc, type: 3}
-      propertyPath: m_LocalPosition.z
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 6473578431290561273, guid: 58b54d617e751b140b7a6d03bc5446bc, type: 3}
-      propertyPath: m_LocalRotation.w
-      value: 1
-      objectReference: {fileID: 0}
-    - target: {fileID: 6473578431290561273, guid: 58b54d617e751b140b7a6d03bc5446bc, type: 3}
-      propertyPath: m_LocalRotation.x
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 6473578431290561273, guid: 58b54d617e751b140b7a6d03bc5446bc, type: 3}
-      propertyPath: m_LocalRotation.y
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 6473578431290561273, guid: 58b54d617e751b140b7a6d03bc5446bc, type: 3}
-      propertyPath: m_LocalRotation.z
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 6473578431290561273, guid: 58b54d617e751b140b7a6d03bc5446bc, type: 3}
-      propertyPath: m_LocalEulerAnglesHint.x
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 6473578431290561273, guid: 58b54d617e751b140b7a6d03bc5446bc, type: 3}
-      propertyPath: m_LocalEulerAnglesHint.y
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 6473578431290561273, guid: 58b54d617e751b140b7a6d03bc5446bc, type: 3}
-      propertyPath: m_LocalEulerAnglesHint.z
-      value: 0
-      objectReference: {fileID: 0}
-    m_RemovedComponents: []
-    m_RemovedGameObjects: []
-    m_AddedGameObjects: []
-    m_AddedComponents:
-    - targetCorrespondingSourceObject: {fileID: 1668245068365282562, guid: 58b54d617e751b140b7a6d03bc5446bc, type: 3}
-      insertIndex: -1
-      addedObject: {fileID: 2647801867824992716}
-  m_SourcePrefab: {fileID: 100100000, guid: 58b54d617e751b140b7a6d03bc5446bc, type: 3}
---- !u!1 &2647801867824992715 stripped
-GameObject:
-  m_CorrespondingSourceObject: {fileID: 1668245068365282562, guid: 58b54d617e751b140b7a6d03bc5446bc, type: 3}
-  m_PrefabInstance: {fileID: 2647801867824992714}
-  m_PrefabAsset: {fileID: 0}
---- !u!114 &2647801867824992716
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2647801867824992715}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 29f3064dcba34264fa92a917d41c52c6, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::AI_Workshop03.SteeringAgent
-  _agentPlaneOffsetY: 0.5
-  _navigationService: {fileID: 933149811}
-  _mapManager: {fileID: 925457158}
-  _speed: 10
-  _waypointRadius: 0.05
-  _minManhattanFactor: 0.3
-  _minManhattanClampMin: 2
-  _minManhattanClampMax: 200
-  _visualizeFinalPath: 1
-  _showStartAndGaol: 1
 --- !u!1001 &7347946356751452806
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -1188,10 +1031,8 @@ SceneRoots:
   - {fileID: 1352866329}
   - {fileID: 307017233}
   - {fileID: 710271823}
-  - {fileID: 933149812}
   - {fileID: 925457159}
   - {fileID: 7347946356751452806}
-  - {fileID: 2647801867824992714}
   - {fileID: 408078526}
   - {fileID: 731348252}
   - {fileID: 2070732536}
