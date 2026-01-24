@@ -1,5 +1,4 @@
 using System;
-using Unity.Burst.CompilerServices;
 using UnityEngine;
 
 
@@ -45,6 +44,7 @@ namespace AI_Workshop03
         #endregion
 
 
+        #region Lifecycle
 
         private void Awake()
         {
@@ -85,8 +85,11 @@ namespace AI_Workshop03
         }
 
 
+        #endregion
 
-        #region Ensure Internal State
+
+
+        #region  Map Hooks and Ensure Internal State
 
         private void HandleMapRebuilt(MapData data)
         {
@@ -107,6 +110,17 @@ namespace AI_Workshop03
 
         private void EnsureBuffers()
         {
+            // See if this is a better check? And if so use everywhere! 
+            /*
+            if (_data == null && _mapManager.Data != null)
+                _data = _mapManager.Data;
+            else if (_data == null)
+            {
+                Debug.LogWarning("MapRenderer2D could not find any map data!");
+                return;
+            }
+            */
+
             if (_data == null) return;
 
             int n = _data.CellCount;
@@ -256,7 +270,7 @@ namespace AI_Workshop03
             RebuildCellColorsFromBase();
         }
 
-        public void MarkCellTruthChanged(int index)
+        public void MarkCellTruthChanged(int index, bool updateVisuals = true)
         {
             if (_data == null) return;
             EnsureBuffers();
@@ -266,11 +280,22 @@ namespace AI_Workshop03
             _data.IndexToXY(index, out int x, out int z);
             bool odd = ((x + z) & 1) == 1;
             _cellColors[index] = ApplyGridShading(_data.BaseCellColors[index], odd);
-            _textureDirty = true;
+
+            if (updateVisuals) _textureDirty = true;
+        }
+
+        public void MarkMultipleCellTruthsChanged(ReadOnlySpan<int> indices)
+        {
+            for (int i = 0; i < indices.Length; i++)
+                MarkCellTruthChanged(indices[i], updateVisuals: false);
+
+            _textureDirty = true; // one final dirty set
         }
 
 
-        public void PaintCell(int index, Color32 color, bool shadeLikeGrid = true, bool skipIfObstacle = true)
+        public void PaintCell(int index, Color32 color, 
+            bool shadeLikeGrid = true, bool skipIfObstacle = true, 
+            bool updateVisuals = true)
         {
             if (_data == null) return;
             EnsureBuffers();
@@ -289,16 +314,22 @@ namespace AI_Workshop03
                 _cellColors[index] = color;
             }
 
+            if (updateVisuals) _textureDirty = true;
+        }
+
+        public void PaintMultipleCells(ReadOnlySpan<int> indices, Color32 color, 
+            bool shadeLikeGrid = true, 
+            bool skipIfObstacle = true)
+        {
+            for (int i = 0; i < indices.Length; i++)
+                PaintCell(indices[i], color, shadeLikeGrid, skipIfObstacle, updateVisuals: false);
+
             _textureDirty = true;
         }
 
-        public void PaintMultipleCells(ReadOnlySpan<int> indices, Color32 color, bool shadeLikeGrid = true, bool skipIfObstacle = true)
-        {
-            for (int i = 0; i < indices.Length; i++)
-                PaintCell(indices[i], color, shadeLikeGrid, skipIfObstacle);
-        }
-
-        public void PaintCellTint(int index, Color32 overlayColor, float strength01 = 0.35f, bool shadeLikeGrid = true, bool skipIfObstacle = true)
+        public void PaintCellTint(int index, Color32 overlayColor, float strength01 = 0.35f, 
+            bool shadeLikeGrid = true, bool skipIfObstacle = true, 
+            bool updateVisuals = true)
         {
             if (_data == null) return;
             EnsureBuffers();
@@ -319,13 +350,17 @@ namespace AI_Workshop03
             }
 
             _cellColors[index] = LerpColor32(basecolor, overlay, strength01);
-            _textureDirty = true;
+
+            if (updateVisuals) _textureDirty = true;
         }
 
-        public void PaintMultipleCellTints(ReadOnlySpan<int> indices, Color32 overlayColor, float strength01 = 0.35f, bool shadeLikeGrid = true, bool skipIfObstacle = true)
+        public void PaintMultipleCellTints(ReadOnlySpan<int> indices, Color32 overlayColor, float strength01 = 0.35f, 
+            bool shadeLikeGrid = true, bool skipIfObstacle = true)
         {
             for (int i = 0; i < indices.Length; i++)
-                PaintCellTint(indices[i], overlayColor, strength01, shadeLikeGrid, skipIfObstacle);
+                PaintCellTint(indices[i], overlayColor, strength01, shadeLikeGrid, skipIfObstacle, updateVisuals: false);
+
+            _textureDirty = true;
         }
 
         public void ShowUnreachableOverlay(int[] reachStamp, int reachStampId, Color32 unreachableColor)

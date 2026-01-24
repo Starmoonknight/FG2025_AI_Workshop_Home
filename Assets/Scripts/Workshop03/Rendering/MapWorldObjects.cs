@@ -97,7 +97,7 @@ namespace AI_Workshop03
 
 
 
-        #region Unity Lifecycle
+        #region Lifecycle
 
         private void Awake()
         {
@@ -111,8 +111,18 @@ namespace AI_Workshop03
 
         private void OnEnable()
         {
+            if (_mapManager == null)
+                _mapManager = FindFirstObjectByType<MapManager>();
+
             if (_mapManager != null)
+            {
                 _mapManager.OnMapRebuilt += HandleMapRebuilt;
+
+                // If map already exists, sync immediately
+                var current = _mapManager.Data;
+                if (current != null)
+                    HandleMapRebuilt(current);
+            }
         }
 
         private void OnDisable()
@@ -568,6 +578,17 @@ namespace AI_Workshop03
 
         private void EnsureCapacity()
         {
+            // See if this is a better check? And if so use everywhere! 
+            /*
+            if (_data == null && _mapManager.Data != null)
+                _data = _mapManager.Data;
+            else if (_data == null)
+            {
+                Debug.LogWarning("MapWorldObjects could not find any map data!");
+                return;
+            }
+            */
+
             if (_data == null) return; 
 
             int n = _data.CellCount;

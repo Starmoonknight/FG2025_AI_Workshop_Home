@@ -20,15 +20,15 @@ namespace AI_Workshop03
         [SerializeField, Min(0f)] private float _searchDelay = 0.4f;
         [SerializeField, Min(0f)] private float _pathDelay = 0.1f;
 
-
         [Header("Visualization Colors")]
         [SerializeField, Range(0,1)] private float _spreadOverlayStrength = 0.35f;
         [SerializeField, Range(0,1)] private float _pathOverlayStrength = 0.5f;
-        [SerializeField] private Color32 _triedColor = new(185, 0, 255, 255);        // closed,          purple
-        [SerializeField] private Color32 _frontierColor = new(180, 170, 255, 255);   // open (optional), light purple-blue
-        [SerializeField] private Color32 _pathColor = new(6, 225, 25, 255);          // final path,      green
-        [SerializeField] private Color32 _startColor = new(0, 255, 255, 255);        // start cell,      light blue 
-        [SerializeField] private Color32 _goalColor = new(255, 255, 0, 255);         // goal cell,       yellow 
+        [SerializeField] private Color32 _triedColor = new(185, 0, 255, 255);           // closed,          purple
+        [SerializeField] private Color32 _frontierColor = new(180, 170, 255, 255);      // open (optional), light purple-blue
+        [SerializeField] private Color32 _pathColor = new(6, 225, 25, 255);             // final path,      green
+        [SerializeField] private Color32 _startColor = new(0, 255, 255, 255);           // start cell,      light blue 
+        [SerializeField] private Color32 _goalColor = new(255, 255, 0, 255);            // goal cell,       yellow 
+        [SerializeField] private Color32 _unReachableColor = new(255, 150, 150, 255);   // Light Red
 
         // Internal data
         private int _totalCells;    // total number of cells in the grid
@@ -43,9 +43,12 @@ namespace AI_Workshop03
         private byte[] _state;      // 0 = unvisited, 1 = in open set, 2 = closed
 
         private MapData _data;
+        private MapReachability _reachability;
 
         private Coroutine _computeCo; 
         private Coroutine _replayCo;
+
+        private System.Random _goalRng;
 
         public bool IsPathComputing { get; private set; }
         public bool IsVisualizing { get; private set; }
@@ -53,6 +56,7 @@ namespace AI_Workshop03
         public int CurrentWaypointIndex { get; private set; }
         public int RemainingCost { get; private set; }
 
+        public System.Random GoalRng => _goalRng;
         public bool AllowDiagonals => _allowDiagonals;
         public int CurrentStartIndex { get; private set; } = -1;
         public int CurrentGoalIndex { get; private set; } = -1;
@@ -78,6 +82,12 @@ namespace AI_Workshop03
         {
             if (_mapManager == null) _mapManager = FindFirstObjectByType<MapManager>();
             if (_mapRenderer2D == null) _mapRenderer2D = FindFirstObjectByType<MapRenderer2D>();
+
+            // has a seperate instance than the MapManager to avoid shared mutable reachability stamps being overwritten by another BFS call
+            _reachability = new MapReachability();
+
+            // Initialize random generators to ensure seeded repeatability
+            _goalRng = new System.Random();
         }
 
         private void OnEnable()
@@ -140,7 +150,7 @@ namespace AI_Workshop03
         public void StartVisualPathFromCenter(int minManhattan = 20)
         {
             int startIndex = _data.CoordToIndex(_data.Width / 2, _data.Height / 2);
-            if (_mapManager.TryPickRandomReachableGoal(startIndex, minManhattan, _allowDiagonals, out int goalIndex))
+            if (TryPickRandomReachableGoal(_goalRng, startIndex, minManhattan, out int goalIndex))
             {
                 StartVisualPath(startIndex, goalIndex);
             }
@@ -182,6 +192,56 @@ namespace AI_Workshop03
 
             int cell = CurrentPath[CurrentWaypointIndex];
             RemainingCost = TotalPathCost - _gCost[cell];
+        }
+
+
+        #endregion
+
+
+
+        #region Reachability Wrappers
+        public bool TryValidateReachablePair(int startIndex, int goalIndex)
+        {
+            if (_data == null) throw new InvalidOperationException("Map not generated yet.");
+
+            bool allow = _data.AllowDiagonalTraversal && _allowDiagonals;    // map rule as an upper limit and has final say, requester asks as a per-requester settings 
+            return _reachability.TryValidateReachablePair(_data, startIndex, goalIndex, allow);
+        }
+
+        public bool TryPickRandomReachableGoal(System.Random rng, int startIndex, int minManhattan, out int goalIndex)
+        {
+            if (_data == null) throw new InvalidOperationException("Map not generated yet.");
+
+            bool allow = _data.AllowDiagonalTraversal && _allowDiagonals;    // map rule as an upper limit and has final say, requester asks as a per-requester settings 
+            return _reachability.TryPickRandomReachableGoal(_data, rng, startIndex, minManhattan, allow, out goalIndex);
+        }
+
+        // Visual version that asks renderer to show unreachable areas from the center of the map
+        public void BuildVisualReachableFrom(int startIndex)
+        {
+            if (_data == null) throw new InvalidOperationException("Map not generated yet.");
+
+            bool allow = _data.AllowDiagonalTraversal && _allowDiagonals;    // map rule as an upper limit and has final say, requester asks as a per-requester settings 
+            _reachability.BuildReachableFrom(_data, startIndex, allow);
+
+            // Ask renderer to show unreachable areas using latest reach data
+            if (_mapRenderer2D != null)
+                _mapRenderer2D.ShowUnreachableOverlay(
+            _reachability.StampArray,
+            _reachability.StampId,
+            _unReachableColor
+            );
+        }
+
+
+        // not safe as a public method? This needs to be called in the same stamp generation before data has been mutated. 
+        // if needed, must set up a method in NavigationService that calls: method A first, and this directly after 
+        private int BuildReachableFrom(int startIndex)
+        {
+            if (_data == null) throw new InvalidOperationException("Map not generated yet.");
+
+            bool allow = _data.AllowDiagonalTraversal && _allowDiagonals;    // map rule as an upper limit and has final say, requester asks as a per-requester settings 
+            return _reachability.BuildReachableFrom(_data, startIndex, allow);
         }
 
 
@@ -233,7 +293,7 @@ namespace AI_Workshop03
                 _mapManager.ClearDebugCostsTouched();
 
                 if (visualizeAll)
-                    _mapManager.BuildVisualReachableFrom(startIndex, _allowDiagonals);
+                    BuildVisualReachableFrom(startIndex);
 
                 if (showStartGoalMarkers)
                 {

@@ -100,7 +100,7 @@ namespace AI_Workshop03
 
             ResetPathState();
 
-            if (!_mapManager.TryValidateReachablePair(startIndex, goalIndex, _navigationService.AllowDiagonals)) return;
+            if (!_navigationService.TryValidateReachablePair(startIndex, goalIndex)) return;
 
             transform.position = WorldFromIndex(startIndex);
             StartPath(startIndex, goalIndex);
@@ -203,7 +203,7 @@ namespace AI_Workshop03
             for (int attempt = 0; attempt < MaxPickAttempts; attempt++)
             {
                 if (!TryPickPoint(out int start)) break;
-                if (!_mapManager.TryValidateReachablePair(start, goalIndex, _navigationService.AllowDiagonals))
+                if (!_navigationService.TryValidateReachablePair(start, goalIndex))
                     continue;
 
                 transform.position = WorldFromIndex(start);
@@ -315,17 +315,17 @@ namespace AI_Workshop03
             {
                 int idx = haveOtherIndex.Value;
 
-                if (!_mapManager.TryValidateReachablePair(anchorIndex, idx, _navigationService.AllowDiagonals)) return false;
+                if (!_navigationService.TryValidateReachablePair(anchorIndex, idx)) return false;
 
                 otherIndex = idx;
                 return true;
             }
 
             // pick a random reachable otherIndex
-            return _mapManager.TryPickRandomReachableGoal(
+            return _navigationService.TryPickRandomReachableGoal(
+                _navigationService.GoalRng,
                 anchorIndex,
                 minManhattan,
-                _navigationService.AllowDiagonals,
                 out otherIndex
             );
         }
@@ -340,7 +340,7 @@ namespace AI_Workshop03
             if (data.IsBlocked[currentStartIdx])
                 return false;
 
-            if (!_mapManager.TryValidateReachablePair(currentStartIdx, goalIndex, _navigationService.AllowDiagonals))
+            if (!_navigationService.TryValidateReachablePair(currentStartIdx, goalIndex))
                 return false;
 
             transform.position = WorldFromIndex(currentStartIdx);

@@ -40,7 +40,8 @@ namespace AI_Workshop03
             int maxGenerateAttempts,
             float minUnblockedPercent,
             float minReachablePercent,
-            Func<int, int> buildReachableFrom   // callback into BoardManager
+            bool allowDiagonals,
+            MapReachability mapReach   // callback into BoardManager
         )
         {
 
@@ -164,7 +165,7 @@ namespace AI_Workshop03
                 float unblockedPercent = walkableCount / (float)_cellCount;
                 if (unblockedPercent < minUnblocked) continue;                      // If map has to many obstacles placed, fail and try again
 
-                int reachableCount = buildReachableFrom(startIndex);
+                int reachableCount = mapReach.BuildReachableFrom(data, startIndex, allowDiagonals);
                 float reachablePercent = reachableCount / (float)walkableCount;
 
 

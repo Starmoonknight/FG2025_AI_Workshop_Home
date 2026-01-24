@@ -1,14 +1,112 @@
-using UnityEngine;
 using System;
-
+using UnityEngine;
 
 
 namespace AI_Workshop03
 {
 
-    // MapManager.BuildMap.cs         -   Purpose: map creation + calling generator + map init / reseed
-    public partial class MapManager
+    // Version2 of BoardManager    -> MapManager
+    // MapManager.cs         -   Purpose: the "header / face file", top-level API and properties
+    public partial class MapManager : MonoBehaviour
     {
+        #region Inspector Fields and Private Properties
+
+        [Header("Game Camera Settings")]
+        [SerializeField] private Camera _mainCamera;
+        [SerializeField] private float _cameraPadding = 1f;
+
+        [Header("Board Settings")]
+        [SerializeField] private Renderer _boardRenderer;
+        [SerializeField, Min(1)] private int _width = 10;
+        [SerializeField, Min(1)] private int _height = 10;
+        [SerializeField, Min(1)] private int _baseTerrainCost = 10;
+        [SerializeField] private bool _allowDiagonalTraversal = true;
+
+        // NOTE:
+        /*
+         * 
+         *   Make a MapGenConfig / MapDefaults class for default settings? 
+         *       
+         *    [Serializable]
+         *    public class MapDefaults
+         *    {
+         *        public int BaseTerrainCost = 10;
+         *        public Color32 WalkableColor = new Color32(60, 140, 60, 255);
+         *        public byte BaseTerrainKey = (byte)TerrainID.Land;
+         *    }
+         *    
+         *    Then have MapManager use _defaults.BaseTerrainCost everywhere
+         *    Scalability architecturewhen more defaults appear?
+        */
+
+        [Header("Map Generation Settings")]
+        [SerializeField] private int _seed = 0;
+        [SerializeField] private int _lastGeneratedSeed = 0;
+        [SerializeField, Range(0f, 1f)] private float _minUnblockedPercent = 0.5f;
+        [SerializeField, Range(0f, 1f)] private float _minReachablePercent = 0.75f;
+        [SerializeField] private int _maxGenerateAttempts = 50;
+
+        [Header("Generation Data")]
+        [SerializeField] private TerrainTypeData[] _terrainData;
+
+        [SerializeField] private MapRenderer2D _renderer2D;
+        [SerializeField] private MapWorldObjects _worldObjects;
+
+        [Header("Colors")]
+        [SerializeField] private Color32 _walkableColor = new(255, 255, 255, 255);       // White
+        [SerializeField] private Color32 _obstacleColor = new(0, 0, 0, 255);             // Black
+
+        private float _cellTileSize = 1f;
+        private int _minTerrainCost = 10;   // minimum terrain cost on the map (used for pathfinding heuristic)
+
+        private MapData _data;
+        private MapReachability _reachability;
+
+        private readonly MapDataGenerator _generator = new MapDataGenerator();
+        private int _mapBuildId = 0;
+
+
+        #endregion
+        
+
+
+        #region Public Properties and Events
+
+        public int MinTerrainCost => _minTerrainCost;
+        public int LastGeneratedSeed => _lastGeneratedSeed;
+        public MapData Data => _data;
+        public TerrainTypeData[] TerrainRules => _terrainData; 
+        public Renderer BoardRenderer => _boardRenderer;
+        public Collider BoardCollider => _boardRenderer != null ? _boardRenderer.GetComponent<Collider>() : null;
+
+
+        public event Action<MapData> OnMapRebuilt;
+
+
+        #endregion
+
+
+
+        private const float UNITY_PLANE_SIZE = 10f; // Plane is 10x10 units at scale 1
+
+
+        private void Awake()
+        {
+            if (_renderer2D == null)
+                _renderer2D = FindFirstObjectByType<MapRenderer2D>();
+
+            if (_worldObjects == null)
+                _worldObjects = FindFirstObjectByType<MapWorldObjects>();
+
+            _reachability = new MapReachability();
+
+            GenerateNewGameBoard();
+
+            //DebugCornerColorTest(); 
+        }
+
+
+
 
 
         public void GenerateNewGameBoard()
@@ -26,15 +124,11 @@ namespace AI_Workshop03
             int baseSeed = (_seed != 0) ? _seed : Environment.TickCount;    // if seed is 0 use random seed
             int genSeed = baseSeed;                                         // main generation randomness seed
             int orderSeed = baseSeed ^ unchecked((int)0x73856093);          // terrain paint ordering randomness (rarity shuffle), salted seed
-            int goalSeed = baseSeed ^ unchecked((int)0x9E3779B9);           // goal picking randomness, salted seed
 
             // Store last used seed for reference
             _lastGeneratedSeed = baseSeed;
             Debug.Log($"[MapManager] Generated map with seed={baseSeed} (genSeed={genSeed}) (orderSeed={orderSeed})");
             UpdateSeedHud();
-
-            // Initialize random generators to ensure seeded repeatability
-            _goalRng = new System.Random(goalSeed);
 
             // Reset truth arrays to base state for a fresh generation   (walkable land, cost 10    /or whatever _baseTerrainCost is)
             _data.InitializeToBase(
@@ -45,6 +139,11 @@ namespace AI_Workshop03
                 baseTerrainColor: _walkableColor
             );
 
+
+
+            // TODO (architecture): Generator debug flags are currently driven by MapManager for convenience.
+            // If MapGenerator needs to become reusable (non-Unity, tests, tools), move these debug toggles into a
+            // dedicated config/settings object (e.g. MapGenDebugSettings) passed into the generator instead.
 
             // Setup the Debug
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
@@ -59,13 +158,14 @@ namespace AI_Workshop03
             // Call the BoardGenerator to generate the map by running terrain generation into the existing MapData arrays (single source of truth)
             _generator.Generate(
                 _data,
-                genSeed,                // Generation seed (0 = random). Controls placement randomness.
-                orderSeed,              // Terrain order seed (rarity/layer shuffle). Controls order of terrain rules.
-                _terrainData,           // Terrain rule list (ScriptableObject data). Each entry may paint/overwrite cells.
-                _maxGenerateAttempts,   // Safety cap: max full generation retries before giving up (avoid infinite loops).
-                _minUnblockedPercent,   // Required % of cells that must remain walkable (limits obstacle terrain budget). 
-                _minReachablePercent,   // Required % of walkable cells that must be connected (flood-fill from start).
-                BuildReachableFrom      // Connectivity evaluator: returns reachable walkable cell count from a start index.
+                genSeed,                            // Generation seed (0 = random). Controls placement randomness.
+                orderSeed,                          // Terrain order seed (rarity/layer shuffle). Controls order of terrain rules.
+                _terrainData,                       // Terrain rule list (ScriptableObject data). Each entry may paint/overwrite cells.
+                _maxGenerateAttempts,               // Safety cap: max full generation retries before giving up (avoid infinite loops).
+                _minUnblockedPercent,               // Required % of cells that must remain walkable (limits obstacle terrain budget). 
+                _minReachablePercent,               // Required % of walkable cells that must be connected (flood-fill from start).
+                _allowDiagonalTraversal,            // Should diagonal tiles be included when determening map reachability potential 
+                _reachability                       // Connectivity evaluator: returns reachable walkable cell count from a start index.
             );
 
 
@@ -92,13 +192,14 @@ namespace AI_Workshop03
                 buildId: _mapBuildId,
                 mapGenSeed: baseSeed,
                 gridOriginWorld: gridOrigin,
-                cellTileSize: _cellTileSize
+                cellTileSize: _cellTileSize,
+                allowDiagonals: _allowDiagonalTraversal
                 );
 
 
             FitCameraOrthoTopDown();
-            
-            
+
+
             // Notify listeners that map has been rebuilt
             OnMapRebuilt?.Invoke(_data);
 
@@ -167,6 +268,8 @@ namespace AI_Workshop03
 
             _mainCamera.orthographicSize = Mathf.Max(sizeToFitHeight, sizeToFitWidth) + _cameraPadding;
         }
+
+
 
 
     }

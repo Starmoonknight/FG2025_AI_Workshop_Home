@@ -91,6 +91,7 @@ namespace AI_Workshop03
         public Vector3 MinWorld { get; private set; }           // Bounds / World-space rectangle that the grid occupies
         public Vector3 MaxWorld { get; private set; }           // Bounds / World-space rectangle that the grid occupies
         public Vector3 GridCenter { get; private set; }         // Center of the map
+        public bool AllowDiagonalTraversal { get; private set; }    // For A* pathfinding accessability, also affects what is considered an acceptaple map at the generation stage
 
 
         // Base defaults (NOT per-cell). These are used to reset the map and define "empty baseline state".
@@ -99,7 +100,7 @@ namespace AI_Workshop03
         public Color32 BaseTerrainColor { get; private set; }   // Baseline visual color applied to every cell during ResetToBase
 
 
-        // Truth arrays (SoA). These represent the CURRENT map state and are the single source of truth for gameplay + visuals.        public bool[] IsBlocked { get; private set; }           // True = cell is blocked/unwalkable (obstacle)
+        // Truth arrays (SoA). These represent the CURRENT map state and are the single source of truth for gameplay + visuals.        // public bool[] IsBlocked { get; private set; }           // True = cell is blocked/unwalkable (obstacle)
         public bool[] IsBlocked { get; private set; }           // True = cell is blocked/unwalkable (obstacle). False = walkable.
         public byte[] TerrainTypeIds { get; private set; }      // Current terrain kind per cell (ex: Land, Water, Mountain...) (changes during generation)
         public int[] TerrainCosts { get; private set; }         // Current movement cost per cell (pathfinding reads this)
@@ -180,8 +181,10 @@ namespace AI_Workshop03
         }
 
 
-        public void SetMapMeta(int buildId, int mapGenSeed, Vector3 gridOriginWorld, float cellTileSize)
+        public void SetMapMeta(int buildId, int mapGenSeed, Vector3 gridOriginWorld, float cellTileSize, bool allowDiagonals)
         {
+            AllowDiagonalTraversal = allowDiagonals;
+
             BuildId = Mathf.Max(0, buildId);
             MapGenSeed = mapGenSeed;
 
