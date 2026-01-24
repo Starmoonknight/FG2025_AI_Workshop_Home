@@ -211,34 +211,25 @@ namespace AI_Workshop03
 
         // Checks if cell coordinates or index are within bounds
 
-        public bool IsValidCellCoord(int x, int y) => (uint)x < (uint)Width && (uint)y < (uint)Height;
-        public bool IsValidCellIndex(int index) => (uint)index < (uint)CellCount;
+        public bool IsValidCellCoord(int x, int y) => 
+            GridMath.IsValidCoord(x, y, Width, Height);
+
+        public bool IsValidCellIndex(int index) =>
+            GridMath.IsValidIndex(index, CellCount);
 
 
-        public int CoordToIndex(int x, int y)
-        {
-            if (!TryCoordToIndex(x, y, out int index))
-                throw new ArgumentOutOfRangeException();
-            return index;
-        }
+        // Throws an error if used with invalid inputs 
+        public int CoordToIndex(int x, int y) =>
+            GridMath.CoordToIndexChecked(x, y, Width, Height);
 
         // Safe version with bounds checking, use when not sure coordinates are valid
-        public bool TryCoordToIndex(int x, int y, out int index)
-        {
-            if ((uint)x >= (uint)Width || (uint)y >= (uint)Height) 
-            { 
-                index = -1; 
-                return false; 
-            }
-            index = x + y * Width;
-            return true;
-        }
+        // Does not throw an error with invalid inputs and returns a bool if the cell exists or not 
+        public bool TryCoordToIndex(int x, int y, out int index) =>
+            GridMath.TryCoordToIndex(x, y, Width, Height, out index);
 
-        public void IndexToXY(int index, out int x, out int y)
-        {
-            x = index % Width;
-            y = index / Width;
-        }
+        public void IndexToXY(int index, out int x, out int y) =>
+            GridMath.IndexToXY(index, Width, out x, out y);
+
 
         public Vector3 IndexToWorldCenterXZ(int index, float yOffset = 0f)
         {

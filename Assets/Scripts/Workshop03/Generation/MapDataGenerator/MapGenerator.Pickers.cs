@@ -40,6 +40,7 @@ namespace AI_Workshop03
         #endregion
 
 
+
         #region Cell Pickers - Basic Pickers
 
         private bool TryPickRandomUnBlocked(out int index, int tries, bool requireBase)
@@ -118,7 +119,7 @@ namespace AI_Workshop03
                 default: x = _rng.Next(0, _width); y = _height - 1; break;                 // top
             }
 
-            int candIdx = CoordToIndex(x, y);
+            int candIdx = CoordToIndexUnchecked(x, y);
             if (!CanPickCell(terrain, candIdx)) return false;
 
             index = candIdx;
@@ -127,6 +128,7 @@ namespace AI_Workshop03
 
 
         #endregion
+
 
 
         #region Cell Pickers - Advanced Focus Pickers
@@ -230,7 +232,7 @@ namespace AI_Workshop03
                 if ((uint)x >= (uint)_width || (uint)y >= (uint)_height) continue;
 
 
-                int candIdx = CoordToIndex(x, y);
+                int candIdx = CoordToIndexUnchecked(x, y);
                 if (_scratch.used[candIdx] != poolId) continue;
 
                 // enforce focus region, if terrain uses that
@@ -291,7 +293,7 @@ namespace AI_Workshop03
                 default: x = _rng.Next(0, _width); y = _rng.Next(_height - band, _height); break;  // top
             }
 
-            int candIdx = CoordToIndex(x, y);
+            int candIdx = CoordToIndexUnchecked(x, y);
             if (!CanPickCell(terrain, candIdx)) return false;
 
             index = candIdx;
@@ -312,7 +314,7 @@ namespace AI_Workshop03
                 int x = _rng.Next(margin, _width - margin);
                 int y = _rng.Next(margin, _height - margin);
 
-                int candIdx = CoordToIndex(x, y);
+                int candIdx = CoordToIndexUnchecked(x, y);
                 if (!CanPickCell(terrain, candIdx)) continue;
                 index = candIdx;
                 return true;
@@ -401,8 +403,6 @@ namespace AI_Workshop03
 
 
         #region Helpers
-
-        private bool IsValidCell(int index) => (uint)index < (uint)_cellCount;
 
         private bool IsEdgeCell(int idx)
         {

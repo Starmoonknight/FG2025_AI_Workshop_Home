@@ -142,8 +142,10 @@ namespace AI_Workshop03
 
 
             // TODO (architecture): Generator debug flags are currently driven by MapManager for convenience.
-            // If MapGenerator needs to become reusable (non-Unity, tests, tools), move these debug toggles into a
-            // dedicated config/settings object (e.g. MapGenDebugSettings) passed into the generator instead.
+            // If MapGenerator needs to become reusable outside Unity/editor tooling later (non-Unity, tests, tools)
+            // Move these debug toggles into a dedicated config/settings object (e.g. MapGenDebugSettings), passing a
+            // small debug settings object/config into Generate() instead.
+
 
             // Setup the Debug
 #if UNITY_EDITOR || DEVELOPMENT_BUILD

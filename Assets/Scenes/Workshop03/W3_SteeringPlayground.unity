@@ -605,7 +605,6 @@ GameObject:
   m_Component:
   - component: {fileID: 925457159}
   - component: {fileID: 925457160}
-  - component: {fileID: 925457161}
   - component: {fileID: 925457158}
   m_Layer: 0
   m_Name: Map Manager
@@ -632,6 +631,7 @@ MonoBehaviour:
   _width: 100
   _height: 100
   _baseTerrainCost: 10
+  _allowDiagonalTraversal: 1
   _seed: 0
   _lastGeneratedSeed: 0
   _minUnblockedPercent: 0.5
@@ -651,9 +651,6 @@ MonoBehaviour:
   _obstacleColor:
     serializedVersion: 2
     rgba: 4278190080
-  _unReachableColor:
-    serializedVersion: 2
-    rgba: 4288059135
   _showSeedHud: 1
   _seedHudLabel: {fileID: 332636614}
   _seedHudPrefix: 'Seed: '
@@ -696,35 +693,6 @@ MonoBehaviour:
   _autoDetectFlip: 1
   _flipTextureX: 1
   _flipTextureY: 1
---- !u!114 &925457161
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 925457157}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 20c0119d0daee6f4d801f9a5d67db39b, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::AI_Workshop03.MapWorldObjects
-  _mapManager: {fileID: 925457158}
-  _fallbackCubePrefab: {fileID: 0}
-  _worldRoot: {fileID: 1671115094}
-  _worldVisualsLayer: 8
-  _obstaclesBlockPhysics: 1
-  _prewarmPools: 1
-  _prewarmPerPrefab: 64
-  _prewarmFallbackCount: 256
-  _prewarmPerFrame: 50
-  _yOffset: 0
-  _spawnForObstacles: 1
-  _tintFallbackCube: 1
-  _useSafetyLimit: 1
-  _maxActiveWorldObjects: 20000
-  _abortRebuildIfOverCap: 1
-  _maxNewInstantiatesPerRebuild: 2000
-  _maxRebuildMs: 120
 --- !u!1 &1223029779
 GameObject:
   m_ObjectHideFlags: 0
@@ -791,6 +759,9 @@ MonoBehaviour:
   _goalColor:
     serializedVersion: 2
     rgba: 4278255615
+  _unReachableColor:
+    serializedVersion: 2
+    rgba: 4288059135
 --- !u!1 &1352866326
 GameObject:
   m_ObjectHideFlags: 0
