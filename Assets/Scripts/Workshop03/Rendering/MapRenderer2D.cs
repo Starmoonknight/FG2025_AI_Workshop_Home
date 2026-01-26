@@ -63,7 +63,7 @@ namespace AI_Workshop03
 
             if (_mapManager != null)
             {
-                _mapManager.OnMapRebuilt += HandleMapRebuilt;
+                _mapManager.OnMapRebuiltDataReady += HandleMapRebuilt;
 
                 // If map already exists, sync immediately
                 var current = _mapManager.Data;
@@ -75,7 +75,7 @@ namespace AI_Workshop03
         private void OnDisable()
         {
             if (_mapManager != null)
-                _mapManager.OnMapRebuilt -= HandleMapRebuilt;
+                _mapManager.OnMapRebuiltDataReady -= HandleMapRebuilt;
         }
 
         private void LateUpdate()

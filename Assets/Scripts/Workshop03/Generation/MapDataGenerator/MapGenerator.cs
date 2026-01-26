@@ -13,8 +13,8 @@ namespace AI_Workshop03
 {
 
     // Version2 of BoardGenerator     -> MapDataGenerator
-    // MapDataGenerator.cs         -   Purpose: the "header / face file", top-level API and properties
-    public sealed partial class MapDataGenerator                       // NOTE: the class was a public sealed class before I changed it to became partial, can thosde two keywords coexist?
+    // MapGenerator.cs         -   Purpose: Core behaviour and "Face" file 
+    public sealed partial class MapGenerator                       // NOTE: the class was a public sealed class before I changed it to became partial, can thosde two keywords coexist?
     {
 
         private sealed class GenScratch

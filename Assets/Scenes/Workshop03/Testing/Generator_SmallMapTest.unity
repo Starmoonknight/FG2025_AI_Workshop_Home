@@ -434,6 +434,9 @@ MonoBehaviour:
   _goalColor:
     serializedVersion: 2
     rgba: 4278255615
+  _unReachableColor:
+    serializedVersion: 2
+    rgba: 4288059135
 --- !u!4 &402172772
 Transform:
   m_ObjectHideFlags: 0
@@ -698,6 +701,7 @@ MonoBehaviour:
   _width: 100
   _height: 100
   _baseTerrainCost: 10
+  _allowDiagonalTraversal: 1
   _seed: 0
   _lastGeneratedSeed: 0
   _minUnblockedPercent: 0.5
@@ -717,9 +721,6 @@ MonoBehaviour:
   _obstacleColor:
     serializedVersion: 2
     rgba: 4278190080
-  _unReachableColor:
-    serializedVersion: 2
-    rgba: 4288059135
   _showSeedHud: 1
   _seedHudLabel: {fileID: 332636614}
   _seedHudPrefix: 'Seed: '
@@ -769,7 +770,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 925457157}
-  m_Enabled: 1
+  m_Enabled: 0
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 20c0119d0daee6f4d801f9a5d67db39b, type: 3}
   m_Name: 
@@ -959,7 +960,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::AI_Workshop03.MapInputController
   _cam: {fileID: 1352866328}
   _mapManager: {fileID: 925457158}
-  _agent: {fileID: 2647801867824992716}
+  _player: {fileID: 0}
   _goalMarker: {fileID: 596407604}
   _click:
     m_Name: Click
@@ -970,6 +971,19 @@ MonoBehaviour:
     m_Interactions: 
     m_SingletonActionBindings: []
     m_Flags: 0
+  _agent: {fileID: 2647801867824992716}
+  _followMode: 0
+  _cellsPerScrollNotch: 2.5
+  _followSmooth: 8
+  _keepOffsetOnSwitch: 1
+  _fixedOffset: {x: 0, y: 8, z: -8}
+  _cellSizeWorld: 1
+  _followViewCells: 15
+  _overviewPadding: 1.5
+  _overviewHeight: 20
+  _zoomSmooth: 10
+  _minViewCells: 6
+  _maxViewCells: 40
 --- !u!4 &1498115188
 Transform:
   m_ObjectHideFlags: 0

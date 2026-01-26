@@ -6,8 +6,8 @@ using UnityEngine;
 
 namespace AI_Workshop03
 {
-    // MapDataGenerator.Lichtenberg.cs      -   Purpose: Lichtenberg mode + widening + heat mechanics
-    public sealed partial class MapDataGenerator
+    // MapGenerator.ModeLichtenberg.cs      -   Purpose: Lichtenberg mode + widening + heat mechanics
+    public sealed partial class MapGenerator
     {
 
         private void GenerateLichtenberg(TerrainTypeData terrain, byte dataLayerId, List<int> outCells)

@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using UnityEngine;
 
 
@@ -62,7 +63,7 @@ namespace AI_Workshop03
         private MapData _data;
         private MapReachability _reachability;
 
-        private readonly MapDataGenerator _generator = new MapDataGenerator();
+        private readonly MapGenerator _generator = new MapGenerator();
         private int _mapBuildId = 0;
 
 
@@ -80,7 +81,23 @@ namespace AI_Workshop03
         public Collider BoardCollider => _boardRenderer != null ? _boardRenderer.GetComponent<Collider>() : null;
 
 
-        public event Action<MapData> OnMapRebuilt;
+        // Fired immediately after MapData is generated and assigned (data is valid/stable).
+        public event Action<MapData> OnMapRebuiltDataReady;
+
+        // Fired one frame later (after renderers/world objects had a chance to sync).
+        public event Action<MapData> OnMapRebuiltVisualsReady;
+
+        // NOTE: MapManager should have two events, one for map setup and one for telling other script's map is completely finnished 
+        //       It should send the first event and then wait for a returnr ping from all neccessary other scripts before sending OnMapRebuilt
+        //       Like an event called MapDataGenerated ->
+        //       the the Render2D and WorldObjects do their things ->
+        //       Ping back to MapManager that keeps track of how many pings it is waiting for and then calls the  OnMapRebuilt Event
+        //
+        //       Probably having a bool set in the end of Generate map where it is currently calling OnMapRebuilt
+        //       it should switch to callin another event (like: MapDataGenerated) and setting a bool called "MapBeingBuilt = true" and in Update wait for the pings,
+        //       then as soon as pings == expectedPings, turn bool false and call  OnMapRebuilt Event
+        //
+        //       FIXED: But needs another ovewrlook before I delete this note 
 
 
         #endregion
@@ -199,12 +216,29 @@ namespace AI_Workshop03
                 );
 
 
+            // Notify listeners that map has been rebuilt
+            HandleMapRebuiltInternal(); 
+
+        }
+
+        // NEW
+        private void HandleMapRebuiltInternal()
+        {
             FitCameraOrthoTopDown();
 
+            // 1) Data is valid right now
+            OnMapRebuiltDataReady?.Invoke(_data);                        // Systems that only need data (pathfinding caches, reachability) subscribe to OnMapRebuiltDataReady
 
-            // Notify listeners that map has been rebuilt
-            OnMapRebuilt?.Invoke(_data);
+            // 2) Visuals will be valid after subscribers run + a frame passes. Only run the coroutine if someone is actually listening
+            if (OnMapRebuiltVisualsReady != null)
+                StartCoroutine(InvokeVisualsReadyEndOfFrame());     // Systems that might compete with initial setup should subscribe to OnMapRebuiltVisualsReady
+        }
 
+        // NEW
+        private IEnumerator InvokeVisualsReadyEndOfFrame()
+        {
+            yield return new WaitForEndOfFrame();
+            OnMapRebuiltVisualsReady?.Invoke(_data);
         }
 
 

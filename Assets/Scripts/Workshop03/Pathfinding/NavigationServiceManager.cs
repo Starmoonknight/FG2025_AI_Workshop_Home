@@ -94,7 +94,7 @@ namespace AI_Workshop03
         {
             if (_mapManager == null) return;
 
-            _mapManager.OnMapRebuilt += HandleMapRebuilt;
+            _mapManager.OnMapRebuiltDataReady += HandleMapRebuilt;
 
             if (_mapManager.Data != null)
                 HandleMapRebuilt(_mapManager.Data);
@@ -102,7 +102,7 @@ namespace AI_Workshop03
 
         private void OnDisable()
         {
-            if (_mapManager != null) _mapManager.OnMapRebuilt -= HandleMapRebuilt;
+            if (_mapManager != null) _mapManager.OnMapRebuiltDataReady -= HandleMapRebuilt;
         }
 
         private void HandleMapRebuilt(MapData data)

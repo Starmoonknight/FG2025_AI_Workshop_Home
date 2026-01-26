@@ -7,8 +7,8 @@ using UnityEngine;
 namespace AI_Workshop03
 {
 
-    // MapDataGenerator.Blobs.cs      -   Purpose: Blob mode generation + Blob expansion internals        
-    public sealed partial class MapDataGenerator
+    // MapGenerator.ModeBlobs.cs      -   Purpose: Blob mode generation + Blob expansion internals        
+    public sealed partial class MapGenerator
     {
 
         private void GenerateBlobs(TerrainTypeData terrain, List<int> outCells)

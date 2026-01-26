@@ -6,8 +6,8 @@ using AreaFocusWeights = AI_Workshop03.TerrainTypeData.AreaFocusWeights;
 
 namespace AI_Workshop03
 {
-    // MapDataGenerator.Pickers.cs      -   Purpose: cell selection toolbox: (choose cells + focus logic + pool logic)   
-    public sealed partial class MapDataGenerator
+    // MapGenerator.Pickers.cs      -   Purpose: cell selection toolbox: (choose cells + focus logic + pool logic)   
+    public sealed partial class MapGenerator
     {
 
         #region Cell Pickers - Core Pick Rules

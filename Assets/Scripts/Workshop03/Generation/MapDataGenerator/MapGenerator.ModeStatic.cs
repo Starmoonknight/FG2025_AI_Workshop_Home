@@ -5,8 +5,8 @@ using UnityEngine;
 namespace AI_Workshop03
 {
 
-    // MapDataGenerator.Static.cs         -   Purpose:  Static mode generation and expansion internals    
-    public sealed partial class MapDataGenerator
+    // MapGenerator.ModeStatic.cs         -   Purpose:  Static mode generation and expansion internals    
+    public sealed partial class MapGenerator
     {
         private void ExpandRandomStatic(
             TerrainTypeData terrain,
