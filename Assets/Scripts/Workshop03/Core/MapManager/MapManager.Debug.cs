@@ -36,6 +36,17 @@ namespace AI_Workshop03
         [SerializeField] private float _costLabelOffsetY = 0.05f;
 
 
+        [Header("Debug: A* Costs Overlay Perf")]
+        [SerializeField, Min(1)] private int _maxCostLabelUpdatesPerFrame = 300;
+        [SerializeField] private bool _onlyUpdateCostTextWhenChanged = true;
+
+        private int _costOverlayFrame = -1;
+        private int _costOverlayUpdatesThisFrame = 0;
+
+        private int[] _lastG;
+        private int[] _lastH;
+        private int[] _lastF;
+
         private TMPro.TextMeshPro[] _costLabels;
         private readonly List<int> _costLabelsTouched = new();
 
@@ -54,16 +65,49 @@ namespace AI_Workshop03
         }
 
 
+        private void EnsureCostOverlayBuffers(int n)
+        {
+            if (_costLabels == null || _costLabels.Length != n)
+                _costLabels = new TMPro.TextMeshPro[n];
+
+            if (_lastG == null || _lastG.Length != n)
+            {
+                _lastG = new int[n];
+                _lastH = new int[n];
+                _lastF = new int[n];
+
+                for (int i = 0; i < n; i++)
+                {
+                    _lastG[i] = int.MinValue;
+                    _lastH[i] = int.MinValue;
+                    _lastF[i] = int.MinValue;
+                }
+            }
+
+            if (_costLabelsTouched.Capacity < n)
+                _costLabelsTouched.Capacity = n;
+        }
+
+
         public void SetDebugCosts(int index, int g, int h, int f)
         {
             if (!_showDebugCosts) return;
-            if (!_data.IsValidCellIndex(index)) return;
+            if (_data == null) return;
             if (_costLabelPrefab == null || _costLabelRoot == null) return;
+            if (!_data.IsValidCellIndex(index)) return;
+
+            if (_costOverlayFrame != Time.frameCount)
+            {
+                _costOverlayFrame = Time.frameCount;
+                _costOverlayUpdatesThisFrame = 0;
+            }
+
+            if (_costOverlayUpdatesThisFrame >= _maxCostLabelUpdatesPerFrame)
+                return;
+
 
             int n = _data.CellCount;
-
-            if (_costLabels == null || _costLabels.Length != n)
-                _costLabels = new TMPro.TextMeshPro[n];
+            EnsureCostOverlayBuffers(n);
 
             var label = _costLabels[index];
             if (label == null)
@@ -81,8 +125,21 @@ namespace AI_Workshop03
 
             label.transform.position = _data.IndexToWorldCenterXZ(index, _costLabelOffsetY);
 
-            // show approx tiles step cost by dividing by 10. Layout: g and h small, f big. Format to one decimal place
-            label.text = $"<size=60%>G{g / 10f:0.0} H{h / 10f:0.0}</size>\n<size=100%><b>F{f / 10f:0.0}</b></size>";
+            bool changed = (_lastG[index] != g) || (_lastH[index] != h) || (_lastF[index] != f);
+            if (!_onlyUpdateCostTextWhenChanged || changed)
+            {
+                // show approx tiles step cost by dividing by 10. Layout: g and h small, f big. Format to one decimal place
+                label.SetText(
+                    "<size=60%>G{0:0.0} H{1:0.0}</size>\n<size=100%><b>F{2:0.0}</b></size>",
+                    g * 0.1f, h * 0.1f, f * 0.1f
+                );
+
+                _lastG[index] = g;
+                _lastH[index] = h;
+                _lastF[index] = f;
+            }
+
+            _costOverlayUpdatesThisFrame++;
         }
 
 
