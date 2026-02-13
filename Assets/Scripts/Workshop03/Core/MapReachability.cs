@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.ConstrainedExecution;
 
 
 namespace AI_Workshop03
@@ -24,7 +25,6 @@ namespace AI_Workshop03
         };
 
 
-
         private void EnsureReachBuffers(int cellCount)
         {
 
@@ -36,14 +36,16 @@ namespace AI_Workshop03
         }
 
 
-
         // NOTE: Not an Atomic method, should only be exposed in a method that calles an Atomic method before this one?
         public int BuildReachableFrom(MapData data, int startIndex, bool allowDiagonals)
         {
-            EnsureReachBuffers(data.CellCount);
+            int cellCount = data.CellCount;
+            EnsureReachBuffers(cellCount);
 
-            if (!data.IsValidCellIndex(startIndex) || data.IsBlocked[startIndex])
-                return 0;
+            if ((uint)startIndex >= (uint)cellCount) return 0;
+
+            var blocked = data.IsBlocked;
+            if (blocked[startIndex]) return 0;
 
             // Prevent stamp id overflow, rare but possible
             if (_reachStampId == int.MaxValue)
@@ -52,54 +54,132 @@ namespace AI_Workshop03
                 _reachStampId = 0; // so next ++ becomes 1
             }
 
-            _reachStampId++;
+            int stamp = ++_reachStampId;
+            int[] stampArr = _reachStamp;
+            int[] queue = _bfsQueue;
+
+            int width = data.Width;
+            int height = data.Height;
 
             int head = 0;   // index of the next item to dequeue
             int tail = 0;   // index where the next item will be enqueued
-
-            _bfsQueue[tail++] = startIndex;
-            _reachStamp[startIndex] = _reachStampId;
+            queue[tail++] = startIndex;
+            stampArr[startIndex] = stamp;
 
             int reachableCount = 1;
 
             while (head < tail)
             {
-                int currentIndex = _bfsQueue[head++];
-                data.IndexToXY(currentIndex, out int coordX, out int coordY);
+                int currentIndex = queue[head++];
 
-                foreach (var (dirX, dirY) in Neighbors8)
+                int y = currentIndex / width;
+                int x = currentIndex - (y * width);
+
+                // Cardinal neighbors
+                if (x > 0)
                 {
-                    // need to match the A* diagonal toggle, otherwise might have an unreachable map but say it is reachable
-                    if (!allowDiagonals && dirX != 0 && dirY != 0)
-                        continue;
-
-                    if (dirX != 0 && dirY != 0)  // need to change to match A*  // think I changed it but double check later
+                    int ni = currentIndex - 1;
+                    if (!blocked[ni] && stampArr[ni] != stamp)
                     {
-                        // Diagonal movement allowed only if at least one side is open
-                        bool sideAOpen = data.TryCoordToIndex(coordX + dirX, coordY, out int sideIndexA) && !data.IsBlocked[sideIndexA];
-                        bool sideBOpen = data.TryCoordToIndex(coordX, coordY + dirY, out int sideIndexB) && !data.IsBlocked[sideIndexB];
-
-                        if (!sideAOpen && !sideBOpen)
-                            continue;
+                        stampArr[ni] = stamp;
+                        queue[tail++] = ni;
+                        reachableCount++;
                     }
+                }
 
-                    TryEnqueue(coordX + dirX, coordY + dirY);
+                if (x < width - 1)
+                {
+                    int ni = currentIndex + 1;
+                    if (!blocked[ni] && stampArr[ni] != stamp)
+                    {
+                        stampArr[ni] = stamp;
+                        queue[tail++] = ni;
+                        reachableCount++;
+                    }
+                }
+
+                if (y > 0)
+                {
+                    int ni = currentIndex - width;
+                    if (!blocked[ni] && stampArr[ni] != stamp)
+                    {
+                        stampArr[ni] = stamp;
+                        queue[tail++] = ni;
+                        reachableCount++;
+                    }
+                }
+
+                if (y + 1 < height)
+                {
+                    int ni = currentIndex + width;
+                    if (!blocked[ni] && stampArr[ni] != stamp)
+                    {
+                        stampArr[ni] = stamp;
+                        queue[tail++] = ni;
+                        reachableCount++;
+                    }
+                }
+
+
+                // Diagonal movement allowed only if at least one side is open
+                if (!allowDiagonals) continue;
+
+                // Corner rule: diagonal allowed only if at least one side is open
+                bool leftOpen = x > 0 && !blocked[currentIndex - 1];
+                bool rightOpen = x + 1 < width && !blocked[currentIndex + 1];
+                bool downOpen = y > 0 && !blocked[currentIndex - width];
+                bool upOpen = y + 1 < height && !blocked[currentIndex + width];
+
+                // Down-left
+                if (x > 0 && y > 0 && (leftOpen || downOpen))
+                {
+                    int ni = currentIndex - width - 1;
+                    if (!blocked[ni] && stampArr[ni] != stamp)
+                    {
+                        stampArr[ni] = stamp;
+                        queue[tail++] = ni;
+                        reachableCount++;
+                    }
+                }
+
+                // Down-right
+                if (x + 1 < width && y > 0 && (rightOpen || downOpen))
+                {
+                    int ni = currentIndex - width + 1;
+                    if (!blocked[ni] && stampArr[ni] != stamp)
+                    {
+                        stampArr[ni] = stamp;
+                        queue[tail++] = ni;
+                        reachableCount++;
+                    }
+                }
+
+                // Up-left
+                if (x > 0 && y + 1 < height && (leftOpen || upOpen))
+                {
+                    int ni = currentIndex + width - 1;
+                    if (!blocked[ni] && stampArr[ni] != stamp)
+                    {
+                        stampArr[ni] = stamp;
+                        queue[tail++] = ni;
+                        reachableCount++;
+                    }
+                }
+
+                // Up-right
+                if (x + 1 < width && y + 1 < height && (rightOpen || upOpen))
+                {
+                    int ni = currentIndex + width + 1;
+                    if (!blocked[ni] && stampArr[ni] != stamp)
+                    {
+                        stampArr[ni] = stamp;
+                        queue[tail++] = ni;
+                        reachableCount++;
+                    }
                 }
             }
 
             return reachableCount;
-
-            void TryEnqueue(int newX, int newY)
-            {
-                if (!data.TryCoordToIndex(newX, newY, out int ni)) return;
-                if (data.IsBlocked[ni]) return;
-                if (_reachStamp[ni] == _reachStampId) return;
-
-                _reachStamp[ni] = _reachStampId;
-                _bfsQueue[tail++] = ni;
-                reachableCount++;
-            }
-
         }
 
         // NOTE: Not an Atomic method, should only be exposed in a method that calles an Atomic method before this one?
@@ -143,25 +223,40 @@ namespace AI_Workshop03
             int reachableCount = BuildReachableFrom(data, startIndex, allowDiagonals);
             if (reachableCount <= 1) return false;
 
-            data.IndexToXY(startIndex, out int startX, out int startY);
+            int width = data.Width;
+            int height = data.Height;
+            int startY = startIndex / width;
+            int startX = startIndex - (startY * width);
+
+            bool[] blocked = data.IsBlocked;
+            int stamp = _reachStampId;
+            int[] reach = _reachStamp;
 
             int candidateCount = 0;
+            int idx = 0;
 
-            for (int i = 0; i < data.CellCount; i++)
+            for (int y = 0; y < height; y++)
             {
-                if (data.IsBlocked[i]) continue;               // skip unwalkable cells
-                if (_reachStamp[i] != _reachStampId) continue;  // if not reachable in current step
-                if (i == startIndex) continue;                  // skip starting cell
+                // where distY is the vertical distance from the start cell, which is constant for each row.
+                // This allows computing the Manhattan distance more efficiently by calculating distY once per row instead of for every cell.
+                // |x-startX|+|y-startY|=|x-startX|+dy
+                int distY = Math.Abs(y - startY);
 
-                data.IndexToXY(i, out int cellX, out int cellY);
-                int manhattan = Math.Abs(cellX - startX) + Math.Abs(cellY - startY);
-                if (manhattan < minManhattan) continue;
+                for (int x = 0; x < width; x++)
+                {
+                    if (idx == startIndex) continue;        // skip starting cell
+                    if (blocked[idx]) continue;             // skip unwalkable cells
+                    if (reach[idx] != stamp) continue;      // if not reachable in current step
 
-                candidateCount++;
+                    int manhattan = Math.Abs(x - startX) + distY;
+                    if (manhattan < minManhattan) continue;
 
-                // Reservoir sampling: each candidate has a 1/candidateCount chance to be selected
-                if (goalRng.Next(candidateCount) == 0)
-                    goalIndex = i;
+                    candidateCount++;
+
+                    // Reservoir sampling: each candidate has a 1/candidateCount chance to be selected
+                    if (goalRng.Next(candidateCount) == 0)
+                        goalIndex = idx;
+                }
             }
 
             return goalIndex != -1;
