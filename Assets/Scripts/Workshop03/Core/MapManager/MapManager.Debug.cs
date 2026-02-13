@@ -21,6 +21,11 @@ namespace AI_Workshop03
         [SerializeField] private bool _dumpFocusWeights = true;
         [SerializeField] private bool _dumpFocusWeightsVerbose = false;
 
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        [SerializeField] private bool _logGenerationSeed = true;
+#endif
+
+
         /*
         [Header("Debug: Generation Attempts")]
         [SerializeField] private bool _logGenAttempts = true;
@@ -54,7 +59,8 @@ namespace AI_Workshop03
         #endregion
 
 
-
+        [System.Diagnostics.Conditional("UNITY_EDITOR")]
+        [System.Diagnostics.Conditional("DEVELOPMENT_BUILD")]
         private void UpdateSeedHud()
         {
             if (!_showSeedHud) return;
@@ -89,12 +95,14 @@ namespace AI_Workshop03
         }
 
 
+        [System.Diagnostics.Conditional("UNITY_EDITOR")]
+        [System.Diagnostics.Conditional("DEVELOPMENT_BUILD")]
         public void SetDebugCosts(int index, int g, int h, int f)
         {
             if (!_showDebugCosts) return;
-            if (_data == null) return;
+            if (m_data == null) return;
             if (_costLabelPrefab == null || _costLabelRoot == null) return;
-            if (!_data.IsValidCellIndex(index)) return;
+            if (!m_data.IsValidCellIndex(index)) return;
 
             if (_costOverlayFrame != Time.frameCount)
             {
@@ -106,7 +114,7 @@ namespace AI_Workshop03
                 return;
 
 
-            int n = _data.CellCount;
+            int n = m_data.CellCount;
             EnsureCostOverlayBuffers(n);
 
             var label = _costLabels[index];
@@ -123,7 +131,7 @@ namespace AI_Workshop03
                 _costLabelsTouched.Add(index);
             }
 
-            label.transform.position = _data.IndexToWorldCenterXZ(index, _costLabelOffsetY);
+            label.transform.position = m_data.IndexToWorldCenterXZ(index, _costLabelOffsetY);
 
             bool changed = (_lastG[index] != g) || (_lastH[index] != h) || (_lastF[index] != f);
             if (!_onlyUpdateCostTextWhenChanged || changed)
@@ -143,6 +151,8 @@ namespace AI_Workshop03
         }
 
 
+        [System.Diagnostics.Conditional("UNITY_EDITOR")]
+        [System.Diagnostics.Conditional("DEVELOPMENT_BUILD")]
         public void ClearDebugCostsTouched()
         {
             if (_costLabelsTouched.Count == 0) return;
@@ -159,6 +169,16 @@ namespace AI_Workshop03
 
 
 
+        [System.Diagnostics.Conditional("UNITY_EDITOR")]
+        [System.Diagnostics.Conditional("DEVELOPMENT_BUILD")]
+        private void LogGenerationSeed(int baseSeed, int genSeed, int orderSeed)
+        {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            if (!_logGenerationSeed) return;
+            Debug.Log($"[MapManager] Generated map with seed={baseSeed} genSeed={genSeed} orderSeed={orderSeed}");
+#endif
+        }
+
 
 #if UNITY_EDITOR
         private void OnValidate() => ValidateGridSize();
@@ -166,14 +186,14 @@ namespace AI_Workshop03
         [ContextMenu("Debug/Corner Color Test")]
         private void DebugCornerColorTest()
         {
-            if (_data == null || _data.CellCount <= 0) return;
+            if (m_data == null || m_data.CellCount <= 0) return;
             if (_renderer2D == null) return;
 
             // Paint corners WITHOUT checker shading and WITHOUT skipping obstacles
-            _renderer2D.PaintCell(_data.CoordToIndex(0, 0), new Color32(255, 0, 0, 255),            shadeLikeGrid: false, skipIfObstacle: false);               // (0,0) red
-            _renderer2D.PaintCell(_data.CoordToIndex(_width - 1, 0), new Color32(0, 255, 0, 255),   shadeLikeGrid: false, skipIfObstacle: false);               // (w-1,0) green
-            _renderer2D.PaintCell(_data.CoordToIndex(0, _height - 1), new Color32(0, 0, 255, 255),  shadeLikeGrid: false, skipIfObstacle: false);               // (0,h-1) blue
-            _renderer2D.PaintCell(_data.CoordToIndex(_width - 1, _height - 1), new Color32(255, 255, 255, 255), shadeLikeGrid: false, skipIfObstacle: false);   // (w-1,h-1) white
+            _renderer2D.PaintCell(m_data.CoordToIndex(0, 0), new Color32(255, 0, 0, 255),            shadeLikeGrid: false, skipIfObstacle: false);               // (0,0) red
+            _renderer2D.PaintCell(m_data.CoordToIndex(_width - 1, 0), new Color32(0, 255, 0, 255),   shadeLikeGrid: false, skipIfObstacle: false);               // (w-1,0) green
+            _renderer2D.PaintCell(m_data.CoordToIndex(0, _height - 1), new Color32(0, 0, 255, 255),  shadeLikeGrid: false, skipIfObstacle: false);               // (0,h-1) blue
+            _renderer2D.PaintCell(m_data.CoordToIndex(_width - 1, _height - 1), new Color32(255, 255, 255, 255), shadeLikeGrid: false, skipIfObstacle: false);   // (w-1,h-1) white
 
             _renderer2D.FlushTexture();
         }

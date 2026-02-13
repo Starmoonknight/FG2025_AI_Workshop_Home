@@ -34,23 +34,23 @@ namespace AI_Workshop03
         // partial edit of data 
         public void ApplyCellEdit(int index, in CellEdit edit, bool updateVisuals = true)
         {
-            if (_data == null) throw new InvalidOperationException("Map not generated yet.");
-            if (!_data.IsValidCellIndex(index)) throw new ArgumentOutOfRangeException(nameof(index));
+            if (m_data == null) throw new InvalidOperationException("Map not generated yet.");
+            if (!m_data.IsValidCellIndex(index)) throw new ArgumentOutOfRangeException(nameof(index));
 
             if (edit.Blocked.HasValue)
-                _data.IsBlocked[index] = edit.Blocked.Value;
+                m_data.IsBlocked[index] = edit.Blocked.Value;
 
             if (edit.TerrainKey.HasValue)
-                _data.TerrainTypeIds[index] = edit.TerrainKey.Value;
+                m_data.TerrainTypeIds[index] = edit.TerrainKey.Value;
 
             if (edit.TerrainCost.HasValue)
-                _data.TerrainCosts[index] = _data.IsBlocked[index] ? 0 : edit.TerrainCost.Value;
+                m_data.TerrainCosts[index] = m_data.IsBlocked[index] ? 0 : edit.TerrainCost.Value;
 
             if (edit.BaseColor.HasValue)
-                _data.BaseCellColors[index] = edit.BaseColor.Value;
+                m_data.BaseCellColors[index] = edit.BaseColor.Value;
 
             if (edit.PaintLayerId.HasValue)
-                _data.LastPaintLayerIds[index] = edit.PaintLayerId.Value;
+                m_data.LastPaintLayerIds[index] = edit.PaintLayerId.Value;
 
             if (updateVisuals)
                 _renderer2D?.MarkCellTruthChanged(index);
@@ -68,14 +68,14 @@ namespace AI_Workshop03
             bool updateVisuals = true
         )
         {
-            if (_data == null) throw new InvalidOperationException("Map not generated yet.");
-            if (!_data.IsValidCellIndex(index)) throw new ArgumentOutOfRangeException(nameof(index));
+            if (m_data == null) throw new InvalidOperationException("Map not generated yet.");
+            if (!m_data.IsValidCellIndex(index)) throw new ArgumentOutOfRangeException(nameof(index));
 
-            _data.IsBlocked[index] = blocked;
-            _data.TerrainTypeIds[index] = terrainKey;
-            _data.TerrainCosts[index] = blocked ? 0 : terrainCost;
-            _data.BaseCellColors[index] = baseColor;
-            _data.LastPaintLayerIds[index] = paintLayerId;
+            m_data.IsBlocked[index] = blocked;
+            m_data.TerrainTypeIds[index] = terrainKey;
+            m_data.TerrainCosts[index] = blocked ? 0 : terrainCost;
+            m_data.BaseCellColors[index] = baseColor;
+            m_data.LastPaintLayerIds[index] = paintLayerId;
 
             if (updateVisuals)
                 _renderer2D?.MarkCellTruthChanged(index); // change visuals to match new terrain after truth changes
@@ -133,28 +133,51 @@ namespace AI_Workshop03
 
         // check if cell is walkable, used for core loops, eg. pathfinding 
         public bool GetWalkable(int index)
-{
-    if (_data == null) throw new InvalidOperationException("Map not generated yet.");
+        {
+            if (m_data == null) throw new InvalidOperationException("Map not generated yet.");
 
-    if (!_data.IsValidCellIndex(index)) throw new ArgumentOutOfRangeException(nameof(index));
-    return !_data.IsBlocked[index];
-}
+            if (!m_data.IsValidCellIndex(index)) throw new ArgumentOutOfRangeException(nameof(index));
+            return !m_data.IsBlocked[index];
+        }
 
-// check terrain cost, used for core loops, eg. pathfinding 
-public int GetTerrainCost(int index)
-{
-    if (_data == null) throw new InvalidOperationException("Map not generated yet.");
+        // check terrain cost, used for core loops, eg. pathfinding 
+        public int GetTerrainCost(int index)
+        {
+            if (m_data == null) throw new InvalidOperationException("Map not generated yet.");
 
-    if (!_data.IsValidCellIndex(index)) throw new ArgumentOutOfRangeException(nameof(index));
-    return _data.TerrainCosts[index];
-}
-
-
-#endregion
+            if (!m_data.IsValidCellIndex(index)) throw new ArgumentOutOfRangeException(nameof(index));
+            return m_data.TerrainCosts[index];
+        }
 
 
+        #endregion
 
 
-}
+        #region Internal hot path getters (used in core loops, eg. map generation)
+
+        internal bool GetWalkableUnchecked(int index) => !m_data.IsBlocked[index];
+
+        internal int GetTerrainCostUnchecked(int index) => m_data.TerrainCosts[index];
+
+        internal void SetCellDataUnchecked(
+            int index,
+            bool blocked,
+            byte terrainKey,
+            int terrainCost,
+            Color32 baseColor,
+            byte paintLayerId = 0)
+        {
+            m_data.IsBlocked[index] = blocked;
+            m_data.TerrainTypeIds[index] = terrainKey;
+            m_data.TerrainCosts[index] = blocked ? 0 : terrainCost;
+            m_data.BaseCellColors[index] = baseColor;
+            m_data.LastPaintLayerIds[index] = paintLayerId;
+        }
+
+        #endregion
+
+
+
+    }
 
 }

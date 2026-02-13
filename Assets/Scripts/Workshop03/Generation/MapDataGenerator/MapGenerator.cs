@@ -20,12 +20,16 @@ namespace AI_Workshop03
         private sealed class GenScratch
         {
             public int[] heat;      // temp int storage
+            public int[] heatStamp;
+            public int heatStampId;
+            
             public int[] poolPos;   // temp int storage
             public int[] queue;     // buffer
             public int stampId;
 
             public int[] stamp;     // stamp based marker
             public int[] used;      // stamp based marker
+            
             public readonly List<int> cells = new(4096);
             public readonly List<int> temp = new(2048);     // buffer
         }
@@ -280,11 +284,22 @@ namespace AI_Workshop03
             TerrainTypeData[] terrainData
         )
         {
+            EnsureGenBuffers();
+
             int attempts = Math.Max(1, maxGenerateAttempts);
+
+            int minWalkableCells = ComputeMinWalkableCells(minUnblocked);
+            float minReachable01 = Mathf.Clamp01(minReachablePercent);
 
             for (int attempt = 0; attempt < attempts; attempt++)            // attempt placement loop, if it fails to meat the any prerequisite, generate a new map. 
             {
-                ResetToBase();
+                // Attempt 0: MapManager already initialized to base.
+                // Attempts 1+: must clear prior attempt.
+                if (attempt > 0)        // on attempt == 0 assumes the map was already initialized to base right before generation
+                    ResetToBase();
+                else
+                    _blockedCount = 0;  // should already be true, just to keep generator state coherent if MapManager already initialized base
+
                 _attemptsThisBuild++;
 
                 ApplyObstacleTerrains(obstaclesList, terrainDataId);        // obstacle placement before other terrain types
@@ -292,10 +307,10 @@ namespace AI_Workshop03
                 if (!EnsureWalkableStartIndex(ref startIndex))              // BuildReachableFrom() will need a valkable startIndex to validate the board 
                     continue;
 
-                if (!MeetsUnblockedPercent(minUnblocked, out int walkableCount))     // If map does not meet walkable space requirement, fail and try again
+                if (!MeetsUnblockedPercent(minWalkableCells, out int walkableCount))     // If map does not meet walkable space requirement, fail and try again
                     continue;
 
-                if (!MeetsReachability(data, startIndex, walkableCount, minReachablePercent, allowDiagonals, mapReach))  // use startIndex to validate the board’s navigability,
+                if (!MeetsReachability(data, startIndex, walkableCount, minReachable01, allowDiagonals, mapReach))  // use startIndex to validate the board’s navigability,
                     continue;
 
 
@@ -338,17 +353,24 @@ namespace AI_Workshop03
                 return true;
 
             return TryPickRandomUnBlocked(out startIndex, 256, requireBase: false);     // pick ANY unblocked cell as BFS seed instead of failing the attempt
-        }                                                                               
+        }
 
 
-        private bool MeetsUnblockedPercent(float minUnblocked, out int walkableCount)   // NOTE: current design stops map from starting as fully blocked
+        // Precompute once per Generate() call (or once per TryGenerateAttempts call)
+        private int ComputeMinWalkableCells(float minUnblocked)
         {
-            walkableCount = CountWalkable();
-            if (walkableCount <= 0)
-                return false;
+            // Required walkable cells derived from percent
+            int minWalkableCells = Mathf.CeilToInt(Mathf.Clamp01(minUnblocked) * _cellCount);
+            return Mathf.Clamp(minWalkableCells, 0, _cellCount);
+        }
 
-            float unblockedPercent = walkableCount / (float)_cellCount;
-            return unblockedPercent >= minUnblocked;
+
+        private bool MeetsUnblockedPercent(float minWalkableCells, out int walkableCount)   // NOTE: current design stops map from starting as fully blocked
+        {
+            walkableCount = _cellCount - _blockedCount; 
+            if (walkableCount <= 0) return false;
+
+            return walkableCount >= minWalkableCells;
         }
 
 
@@ -356,14 +378,21 @@ namespace AI_Workshop03
             MapData data,
             int startIndex,
             int walkableCount,
-            float minReachablePercent,
+            float minReachablePercentClamped,
             bool allowDiagonals,
             MapReachability mapReach
         )
         {
+            // If reachability requirement is 0, accept without BFS
+            if (minReachablePercentClamped <= 0f) return true;
+
             int reachableCount = mapReach.BuildReachableFrom(data, startIndex, allowDiagonals);
-            float reachablePercent = reachableCount / (float)walkableCount;
-            return reachablePercent >= minReachablePercent;
+
+            // Avoid division: reachableCount / (float)walkableCount >= p  <=>  reachableCount >= ceil(p * walkableCount)      
+            // Previously:  float reachablePercent = reachableCount / (float)walkableCount;
+            int minReachableCells = Mathf.CeilToInt(minReachablePercentClamped * walkableCount);
+
+            return reachableCount >= minReachableCells;
         }
 
 
@@ -372,7 +401,9 @@ namespace AI_Workshop03
             Dictionary<TerrainTypeData, byte> terrainDataId
         )
         {
-            ResetWalkableToBaseOnly();
+            // IMPORTANT: In your current pipeline, at this point walkable cells are already base, MapManager calls InitializeToBase() when generating new map.  
+            //            (only painteded obstacles so far). ResetWalkableToBaseOnly() is redundant here but needs to be re-asessed if pipeline changes.
+            //ResetWalkableToBaseOnly();
 
             for (int i = 0; i < walkablesList.Count; i++)
             {
@@ -659,6 +690,9 @@ namespace AI_Workshop03
 
             if (_scratch.poolPos == null || _scratch.poolPos.Length != _cellCount)
                 _scratch.poolPos = new int[_cellCount];
+
+            if (_scratch.heatStamp == null || _scratch.heatStamp.Length != _cellCount)
+                _scratch.heatStamp = new int[_cellCount];
         }
 
         private int NextMarkId()
@@ -677,6 +711,23 @@ namespace AI_Workshop03
             _scratch.stampId = next;
             return next;
         }
+
+        private int NextHeatId()
+        {
+            int next = _scratch.heatStampId + 1;
+            if (next <= 0 || next == int.MaxValue)
+            {
+                Array.Clear(_scratch.heatStamp, 0, _scratch.heatStamp.Length);
+
+                _scratch.heatStampId = 1;
+                return 1;
+            }
+
+            // restart at 1 (0 means unmarked)
+            _scratch.heatStampId = next;
+            return next;
+        }
+
 
 
         #endregion

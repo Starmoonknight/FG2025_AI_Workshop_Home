@@ -15,7 +15,8 @@ namespace AI_Workshop03
 
             outCells.Clear();
             EnsureGenBuffers();
-            Array.Clear(_scratch.heat, 0, _cellCount);
+
+            int heatId = NextHeatId();
 
             int usedId = NextMarkId();
 
@@ -51,7 +52,7 @@ namespace AI_Workshop03
 
 
                 _scratch.temp.Clear();
-                ExpandRandomLichtenberg(terrain, dataLayerId, usedId, start, goal, maxSteps, _scratch.temp);
+                ExpandRandomLichtenberg(terrain, dataLayerId, usedId, start, goal, maxSteps, heatId, _scratch.temp);
 
                 // if widen passes are set above zero 
                 for (int p = 0; p < terrain.Lichtenberg.WidenPasses; p++)
@@ -73,6 +74,7 @@ namespace AI_Workshop03
             int startIndex,
             int targetIndex,
             int maxSteps,
+            int heatId,
             List<int> outCells)
         {
             outCells.Clear();
@@ -187,7 +189,7 @@ namespace AI_Workshop03
                             continue;
 
                         // heat scoring to biase choise
-                        int heat = _scratch.heat[cand];
+                        int heat = (_scratch.heatStamp[cand] == heatId) ? _scratch.heat[cand] : 0;
                         float repel = terrain.Lichtenberg.HeatRepelStrength * heat;
 
                         // penalize stepping on cells allready targeted 
@@ -223,7 +225,7 @@ namespace AI_Workshop03
                 _scratch.queue[walkerThisStep] = nextIndex;
 
                 // update heat after a walker moves
-                AddHeat(nextIndex, terrain.Lichtenberg.HeatRepelRadius, terrain.Lichtenberg.HeatAdd, terrain.Lichtenberg.HeatFalloff);
+                AddHeat(nextIndex, terrain.Lichtenberg.HeatRepelRadius, terrain.Lichtenberg.HeatAdd, terrain.Lichtenberg.HeatFalloff, heatId);
 
                 if (_scratch.stamp[nextIndex] != stampId)
                 {
@@ -272,23 +274,50 @@ namespace AI_Workshop03
         }
 
 
-        private void AddHeat(int idx, int radius, int add, int falloff)
+        private void AddHeat(int idx, int radius, int add, int falloff, int heatId)
         {
+            if (_scratch.heatStamp[idx] != heatId)
+            {
+                _scratch.heatStamp[idx] = heatId;
+                _scratch.heat[idx] = 0;
+            }
             _scratch.heat[idx] += add;
 
             if (radius <= 0) return;
 
             IndexToXY(idx, out int x, out int y);
-            for (int dy = -radius; dy <= radius; dy++)
-                for (int dx = -radius; dx <= radius; dx++)
-                {
-                    if (dx == 0 && dy == 0) continue;
-                    if (!TryCoordToIndex(x + dx, y + dy, out int n)) continue;
 
-                    int manhattanDist = Mathf.Abs(dx) + Mathf.Abs(dy);
-                    int v = Mathf.Max(0, add - falloff * manhattanDist);
+            int minX = Mathf.Max(0, x - radius);
+            int maxX = Mathf.Min(_width - 1, x + radius);
+            int minY = Mathf.Max(0, y - radius);
+            int maxY = Mathf.Min(_height - 1, y + radius);
+
+
+            for (int ny = minY; ny <= maxY; ny++)
+            {
+                int dy = Math.Abs(ny - y);
+                int rowBase = ny * _width;
+
+                for (int nx = minX; nx <= maxX; nx++)
+                {
+                    int dx = Math.Abs(nx - x);
+                    if (dx == 0 && dy == 0) continue;
+
+                    int manhattan = dx + dy;
+                    int v = Math.Max(0, add - falloff * manhattan);
+                    if (v == 0) continue;
+
+                    int n = rowBase + nx;
+
+                    if (_scratch.heatStamp[n] != heatId)
+                    {
+                        _scratch.heatStamp[n] = heatId;
+                        _scratch.heat[n] = 0;
+                    }
+
                     _scratch.heat[n] += v;
                 }
+            }
         }
 
 

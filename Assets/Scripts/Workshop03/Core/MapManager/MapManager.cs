@@ -10,6 +10,15 @@ namespace AI_Workshop03
     // MapManager.cs         -   Purpose: the "header / face file", top-level API and properties
     public partial class MapManager : MonoBehaviour
     {
+        [Serializable]
+        public struct GenerationStage
+        {
+            [Min(1)] public int attempts;
+            [Range(0f, 1f)] public float minUnblockedPercent;
+            [Range(0f, 1f)] public float minReachablePercent;
+        }
+
+
         #region Inspector Fields and Private Properties
 
         [Header("Game Camera Settings")]
@@ -57,28 +66,34 @@ namespace AI_Workshop03
         [SerializeField] private Color32 _walkableColor = new(255, 255, 255, 255);       // White
         [SerializeField] private Color32 _obstacleColor = new(0, 0, 0, 255);             // Black
 
-        private float _cellTileSize = 1f;
-        private int _minTerrainCost = 10;   // minimum terrain cost on the map (used for pathfinding heuristic)
+        private float m_cellTileSize = 1f;
+        private int m_minTerrainCost = 10;   // minimum terrain cost on the map (used for pathfinding heuristic)
 
-        private MapData _data;
-        private MapReachability _reachability;
+        private MapData m_data;
+        private MapReachability m_reachability;
 
-        private readonly MapGenerator _generator = new MapGenerator();
-        private int _mapBuildId = 0;
+        private readonly MapGenerator m_generator = new MapGenerator();
+        private int m_mapBuildId = 0;
+
+        private Collider m_boardColliderCached;
+
+
+
+        private static readonly WaitForEndOfFrame m_waitForEndOfFrame = new WaitForEndOfFrame();
 
 
         #endregion
-        
+
 
 
         #region Public Properties and Events
 
-        public int MinTerrainCost => _minTerrainCost;
+        public int MinTerrainCost => m_minTerrainCost;
         public int LastGeneratedSeed => _lastGeneratedSeed;
-        public MapData Data => _data;
+        public MapData Data => m_data;
         public TerrainTypeData[] TerrainRules => _terrainData; 
         public Renderer BoardRenderer => _boardRenderer;
-        public Collider BoardCollider => _boardRenderer != null ? _boardRenderer.GetComponent<Collider>() : null;
+        public Collider BoardCollider => m_boardColliderCached; 
 
 
         // Fired immediately after MapData is generated and assigned (data is valid/stable).
@@ -115,10 +130,14 @@ namespace AI_Workshop03
             if (_worldObjects == null)
                 _worldObjects = FindFirstObjectByType<MapWorldObjects>();
 
-            _reachability = new MapReachability();
+            if (_boardRenderer != null)
+                m_boardColliderCached = _boardRenderer.GetComponent<Collider>();
+
+            m_reachability = new MapReachability();
 
             GenerateNewGameBoard();
 
+            // Used to fix texture being mirrored and not lining up with coord system map truth 
             //DebugCornerColorTest(); 
         }
 
@@ -128,13 +147,15 @@ namespace AI_Workshop03
 
         public void GenerateNewGameBoard()
         {
+            if (_boardRenderer == null) { Debug.LogError("Board Renderer missing, impossible to make map!"); return; }
+
             ValidateGridSize();
 
             // Initialize or Resize: Ensure MapData instance exists and matches size
-            if (_data == null)
-                _data = new MapData(_width, _height);
+            if (m_data == null)
+                m_data = new MapData(_width, _height);
             else
-                _data.Resize(_width, _height);
+                m_data.Resize(_width, _height);
 
 
             // Generate seeds
@@ -144,11 +165,11 @@ namespace AI_Workshop03
 
             // Store last used seed for reference
             _lastGeneratedSeed = baseSeed;
-            Debug.Log($"[MapManager] Generated map with seed={baseSeed} (genSeed={genSeed}) (orderSeed={orderSeed})");
+            LogGenerationSeed(baseSeed, genSeed, orderSeed);
             UpdateSeedHud();
 
             // Reset truth arrays to base state for a fresh generation   (walkable land, cost 10    /or whatever _baseTerrainCost is)
-            _data.InitializeToBase(
+            m_data.InitializeToBase(
                 width: _width,
                 height: _height,
                 baseTerrainKind: (byte)TerrainID.Land,
@@ -166,17 +187,17 @@ namespace AI_Workshop03
 
             // Setup the Debug
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
-            _generator.Debug_DumpFocusWeights = _dumpFocusWeights;
-            _generator.Debug_DumpFocusWeightsVerbose = _dumpFocusWeightsVerbose;
+            m_generator.Debug_DumpFocusWeights = _dumpFocusWeights;
+            m_generator.Debug_DumpFocusWeightsVerbose = _dumpFocusWeightsVerbose;
 #else
-            _generator.Debug_DumpFocusWeights = false;
-            _generator.Debug_DumpFocusWeightsVerbose = false;
+            m_generator.Debug_DumpFocusWeights = false;
+            m_generator.Debug_DumpFocusWeightsVerbose = false;
 #endif
 
 
             // Call the BoardGenerator to generate the map by running terrain generation into the existing MapData arrays (single source of truth)
-            _generator.Generate(
-                _data,
+            m_generator.Generate(
+                m_data,
                 genSeed,                            // Generation seed (0 = random). Controls placement randomness.
                 orderSeed,                          // Terrain order seed (rarity/layer shuffle). Controls order of terrain rules.
                 _terrainData,                       // Terrain rule list (ScriptableObject data). Each entry may paint/overwrite cells.
@@ -184,15 +205,15 @@ namespace AI_Workshop03
                 _minUnblockedPercent,               // Required % of cells that must remain walkable (limits obstacle terrain budget). 
                 _minReachablePercent,               // Required % of walkable cells that must be connected (flood-fill from start).
                 _allowDiagonalTraversal,            // Should diagonal tiles be included when determening map reachability potential 
-                _reachability                       // Connectivity evaluator: returns reachable walkable cell count from a start index.
+                m_reachability                       // Connectivity evaluator: returns reachable walkable cell count from a start index.
             );
 
 
             RecomputeMinTerrainCost();  // after terrain costs are set compute minimum traversal cost possible on this map
 
             // Board placement in world space
-            float worldW = _data.Width * _cellTileSize;
-            float worldH = _data.Height * _cellTileSize;
+            float worldW = m_data.Width * m_cellTileSize;
+            float worldH = m_data.Height * m_cellTileSize;
 
             // Scale plane to match grid world size, X = width, Z = height  (Unity Plane is 10x10 at scale 1)
             _boardRenderer.transform.localScale = new Vector3(worldW / UNITY_PLANE_SIZE, 1f, worldH / UNITY_PLANE_SIZE);
@@ -202,16 +223,16 @@ namespace AI_Workshop03
             _boardRenderer.transform.rotation = Quaternion.identity;
 
             // Increment how many maps have been built
-            _mapBuildId++;
+            m_mapBuildId++;
 
             // Grid origin is bottom left corner in world space
             Vector3 gridOrigin = _boardRenderer.transform.position - new Vector3(worldW * 0.5f, 0f, worldH * 0.5f);
 
-            _data.SetMapMeta(
-                buildId: _mapBuildId,
+            m_data.SetMapMeta(
+                buildId: m_mapBuildId,
                 mapGenSeed: baseSeed,
                 gridOriginWorld: gridOrigin,
-                cellTileSize: _cellTileSize,
+                cellTileSize: m_cellTileSize,
                 allowDiagonals: _allowDiagonalTraversal
                 );
 
@@ -227,7 +248,7 @@ namespace AI_Workshop03
             FitCameraOrthoTopDown();
 
             // 1) Data is valid right now
-            OnMapRebuiltDataReady?.Invoke(_data);                        // Systems that only need data (pathfinding caches, reachability) subscribe to OnMapRebuiltDataReady
+            OnMapRebuiltDataReady?.Invoke(m_data);                        // Systems that only need data (pathfinding caches, reachability) subscribe to OnMapRebuiltDataReady
 
             // 2) Visuals will be valid after subscribers run + a frame passes. Only run the coroutine if someone is actually listening
             if (OnMapRebuiltVisualsReady != null)
@@ -237,8 +258,8 @@ namespace AI_Workshop03
         // NEW
         private IEnumerator InvokeVisualsReadyEndOfFrame()
         {
-            yield return new WaitForEndOfFrame();
-            OnMapRebuiltVisualsReady?.Invoke(_data);
+            yield return m_waitForEndOfFrame;
+            OnMapRebuiltVisualsReady?.Invoke(m_data);
         }
 
 
@@ -247,9 +268,9 @@ namespace AI_Workshop03
         {
             int minCost = int.MaxValue;
 
-            int n = _data.CellCount;
-            var blocked = _data.IsBlocked;
-            var cost = _data.TerrainCosts;
+            int n = m_data.CellCount;
+            var blocked = m_data.IsBlocked;
+            var cost = m_data.TerrainCosts;
 
             for (int i = 0; i < n; i++)
             {
@@ -261,7 +282,7 @@ namespace AI_Workshop03
             if (minCost == int.MaxValue) minCost = _baseTerrainCost; // default if no walkable cells
             if (minCost < 1) minCost = 1;  // avoid zero cost
 
-            _minTerrainCost = minCost;
+            m_minTerrainCost = minCost;
         }
 
 
@@ -285,15 +306,15 @@ namespace AI_Workshop03
 
             _mainCamera.orthographic = true;
 
-            Vector3 center = _data.GridCenter;
+            Vector3 center = m_data.GridCenter;
 
             // Place camera above the board (a top down XZ plane view)
             _mainCamera.transform.rotation = Quaternion.Euler(90f, 0f, 0f);
             _mainCamera.transform.position = center + Vector3.up * 20f;
 
             // World footprint sizes
-            float worldW = _data.MaxWorld.x - _data.MinWorld.x;  // X size in world units
-            float worldH = _data.MaxWorld.z - _data.MinWorld.z;  // Z size in world units
+            float worldW = m_data.MaxWorld.x - m_data.MinWorld.x;  // X size in world units
+            float worldH = m_data.MaxWorld.z - m_data.MinWorld.z;  // Z size in world units
 
             float halfW = worldW * 0.5f;
             float halfH = worldH * 0.5f;

@@ -1,5 +1,4 @@
 using System;
-using System.Runtime.ConstrainedExecution;
 
 
 namespace AI_Workshop03
@@ -39,6 +38,8 @@ namespace AI_Workshop03
         // NOTE: Not an Atomic method, should only be exposed in a method that calles an Atomic method before this one?
         public int BuildReachableFrom(MapData data, int startIndex, bool allowDiagonals)
         {
+            if (data == null) throw new ArgumentNullException(nameof(data));
+
             int cellCount = data.CellCount;
             EnsureReachBuffers(cellCount);
 
@@ -186,8 +187,13 @@ namespace AI_Workshop03
         // pure stamp check
         public bool IsIndexReachableFromLastBuild(MapData data, int index)
         {
+            if (data == null) throw new ArgumentNullException(nameof(data));
+
             return data.IsValidCellIndex(index)
                 && _reachStamp != null
+                && _reachStampId != 0
+                && (uint)index < (uint)_reachStamp.Length
+                && _reachStamp.Length == data.CellCount
                 && _reachStamp[index] == _reachStampId;
         }
 
@@ -195,9 +201,14 @@ namespace AI_Workshop03
         // stamp check with strickter belt + suspenders safety guard
         public bool IsWalkableIndexReachableFromLastBuild(MapData data, int index)
         {
+            if (data == null) throw new ArgumentNullException(nameof(data));
+
             return data.IsValidCellIndex(index)
                 && !data.IsBlocked[index]
                 && _reachStamp != null
+                && _reachStampId != 0
+                && (uint)index < (uint)_reachStamp.Length
+                && _reachStamp.Length == data.CellCount
                 && _reachStamp[index] == _reachStampId;
         }
 
@@ -206,6 +217,8 @@ namespace AI_Workshop03
         // check if point A and point B can reach eachother, by walkable tiles on the map
         public bool TryValidateReachablePair(MapData data, int startIndex, int goalIndex, bool allowDiagonals)
         {
+            if (data == null) throw new ArgumentNullException(nameof(data));
+
             if (!data.IsValidCellIndex(startIndex) || !data.IsValidCellIndex(goalIndex)) return false;
             if (data.IsBlocked[startIndex] || data.IsBlocked[goalIndex]) return false;
 
@@ -218,6 +231,9 @@ namespace AI_Workshop03
         // This ensures the goal is at least a quarter of the board’s perimeter away from the start.
         public bool TryPickRandomReachableGoal(MapData data, Random goalRng, int startIndex, int minManhattan, bool allowDiagonals, out int goalIndex)
         {
+            if (data == null) throw new ArgumentNullException(nameof(data));
+            if (goalRng == null) throw new ArgumentNullException(nameof(goalRng));
+
             goalIndex = -1;
 
             int reachableCount = BuildReachableFrom(data, startIndex, allowDiagonals);
@@ -233,16 +249,15 @@ namespace AI_Workshop03
             int[] reach = _reachStamp;
 
             int candidateCount = 0;
-            int idx = 0;
 
-            for (int y = 0; y < height; y++)
+            for (int y = 0, idx = 0; y < height; y++)
             {
                 // where distY is the vertical distance from the start cell, which is constant for each row.
                 // This allows computing the Manhattan distance more efficiently by calculating distY once per row instead of for every cell.
                 // |x-startX|+|y-startY|=|x-startX|+dy
                 int distY = Math.Abs(y - startY);
 
-                for (int x = 0; x < width; x++)
+                for (int x = 0; x < width; x++, idx++)
                 {
                     if (idx == startIndex) continue;        // skip starting cell
                     if (blocked[idx]) continue;             // skip unwalkable cells
