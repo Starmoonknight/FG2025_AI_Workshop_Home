@@ -55,7 +55,7 @@ namespace AI_Workshop03
 
         //[Header("Classification")]
         [Tooltip("NOTE: only Land is implemented right now")]
-        public TerrainID TerrainID = TerrainID.Land;
+        public TerrainID TerrainID = TerrainID.Land;                // rename TerrainTypeID for clarity, need to fix in the editor script as well so inspector won't break
 
         [Tooltip("If true: this rule places obstacles (sets blocked=true). If false: paints walkable terrain.")]
         public bool IsObstacle = false;

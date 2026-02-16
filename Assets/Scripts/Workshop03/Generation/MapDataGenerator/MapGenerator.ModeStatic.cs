@@ -8,6 +8,24 @@ namespace AI_Workshop03
     // MapGenerator.ModeStatic.cs         -   Purpose:  Static mode generation and expansion internals    
     public sealed partial class MapGenerator
     {
+
+        /*
+         *  NOTE: Future plan: 
+         * 
+         *  Current Static mode pool-building scans the whole map, O(N) scan per Static terrain rule.
+         *  Risk being a large CPU sink on larger maps
+         * 
+         *  Consider switching to a hybrid strategy of rejection sampling:
+         *      - If the terrain’s target count is “small” relative to eligible space, do rejection sampling without building a full pool.
+         *      - Only build the full pool when target is large (or clustering is enabled and needs pool removal).
+         * 
+         *      Rule of thumb suggested to start with: 
+         *      - If target < 0.01 * _cellCount (1%), skip pool build and just pick randomly with a uniqueness stamp. 
+         *      - Else use pool as you do now.
+         *      - Avoid scanning 1,000,000 cells just to pick e.g. 500. Also need to look into how to make it work with the weighte selection zones.
+         *      
+         */
+
         private void ExpandRandomStatic(
             TerrainTypeData terrain,
             List<int> outCells)
@@ -106,10 +124,8 @@ namespace AI_Workshop03
                 // tries cluster-near pick first inside enforced focus region
                 if (outCells.Count > 0 && _rng.NextDouble() < clusterBias)
                 {
-                    if (TryPickCell_NearExisting(outCells, poolMark, maxRadius, nearTries,
-                            out int near,
-                            focusArea: pickFocus,
-                            interiorMargin: margin))
+                    if (TryPickCell_NearExisting(terrain, outCells, poolMark, maxRadius, nearTries, out int near,
+                            focusArea: pickFocus, interiorMargin: margin))
                     {
                         pickedIdx = near;
                     }

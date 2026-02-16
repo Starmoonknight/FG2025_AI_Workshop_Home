@@ -152,13 +152,19 @@ namespace AI_Workshop03
 
                 int nextIndex = -1;
 
-                // it tries two passes to avoid clumping paths into a ball of spaghetti: unused-first, then allow used if stuck.
-                for (int pass = 0; pass < 2 && nextIndex < 0; pass++)
-                {
-                    bool allowUsedThisPass = (pass == 1);
+                // Pass policy:
+                // - PreferUnused=false  => 1 pass, used cells allowed from the start
+                // - PreferUnused=true & AllowReuse=false => 1 pass, never allow used
+                // - PreferUnused=true & AllowReuse=true  => 2 passes: (0) forbid used, (1) allow used      (two-pass behavior)
+                bool wantsTwoPassPolicy = preferUnused && allowReuse;
+                int passes = wantsTwoPassPolicy ? 2 : 1;
 
-                    if (allowUsedThisPass && (!allowReuse || !preferUnused))
-                        break;
+                // it tries two passes to avoid clumping paths into a ball of spaghetti: unused-first, then allow used if stuck.
+                for (int pass = 0; pass < passes && nextIndex < 0; pass++)
+                {
+                    bool allowUsedThisPass =
+                        !preferUnused                   // not preferring unused: allow used immediately
+                        || (allowReuse && pass == 1);   // preferring unused + reuse enabled: only allow used on fallback pass
 
                     float bestScore = float.NegativeInfinity;
                     int bestCand = -1;
@@ -183,8 +189,9 @@ namespace AI_Workshop03
 
                         bool usedByEarlierPaths = (_scratch.used[cand] == usedId);
                         bool usedByThisTerrainAlready = (_lastPaintLayerId[cand] == terrainPaintId);
-
                         bool used = usedByEarlierPaths || usedByThisTerrainAlready;
+
+                        // only forbid used cells when this pass disallows them
                         if (!allowUsedThisPass && used)
                             continue;
 
@@ -196,7 +203,11 @@ namespace AI_Workshop03
                         if (terrain.Lichtenberg.RepelPenaltyFromExisting && usedByThisTerrainAlready)
                             repel += terrain.Lichtenberg.ExistingCellPenalty;
 
+
+                        // NOTE WARNING: 
+                        //               Lichtenberg heuristic isChebyshev distance, not Manhattan. Need to double check interactions with diagonal steps
                         int candH = Math.Max(Math.Abs(targetX - cx), Math.Abs(targetY - cy));
+
 
                         // allow towardTargetBias to influence scoring
                         bool toward =
@@ -204,7 +215,6 @@ namespace AI_Workshop03
                             (dirX == 0 && dirY == stepY);
 
                         float towardBonus = toward ? (towardTargetBias * 0.35f) : -(towardTargetBias * 0.15f);
-
                         float noise = (float)_rng.NextDouble() * 0.25f;
 
                         float score = (-candH) + towardBonus + noise - repel;

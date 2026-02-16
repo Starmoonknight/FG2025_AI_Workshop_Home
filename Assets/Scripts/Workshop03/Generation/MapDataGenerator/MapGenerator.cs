@@ -106,6 +106,46 @@ namespace AI_Workshop03
 
         #region Map Generation Pipeline
 
+        // NOTE: Future plan 
+        /*  
+         *  Next step revision: Stop full-grid resets per attempt
+         *  
+         *  ResetToBase() writes 5 arrays across _cellCount every attempt:
+         *      _blocked (bool)
+         *      _terrainTypeIds (byte)
+         *      _terrainCost (int)
+         *      _baseColors (Color32)
+         *      _lastPaintLayerId (byte)
+         *  On a 1000×1000 map, _cellCount = 1,000,000. That’s 5,000,000 writes per attempt, plus loop overhead. 
+         *  At _maxGenerateAttempts = 50 it can hit 250 million writes in worst-case.
+         *  
+         *  Replace full reset-per-attempt with a diff/undo strategy (track written indices and reset only those), 
+         *  or generate obstacles into scratch and “commit” only on success. Bigger code refactory rewrite, but it’s probably neccesary for 1000×1000 + many attempts.
+         *  
+         *  ------------------------------------------------------------------------------------------------------------------------------------
+         *  
+         *  
+         *  
+         *  // NOTE: Future plan - Part 2
+         *  
+         *  Currently there is one single BuildReachableFrom() done at generation time, it is worthless and there for my sanity sake.
+         *  Make it an actuall usefull function, by ´stamping all reachable zones and add to map data so pathfinders can use that truth.
+         *  Can also make one obstacle version so there are loggs of all walkable connected spaces AND all blocked connected spaces, 
+         *  so all data is available for debug and gameplay use.
+         *  
+         *  "If you want the stamp to represent “all pockets”, the next step is a connected-components pass (flood fill from every unvisited walkable cell,
+         *  assign component IDs + sizes). But for your stated goal (sanity + debug), your current “reachable from start” stamp is totally fine."
+         *  
+         *  
+         *      Part 3? - look into doing this for all instances of connected terrain zones by type to create an 
+         *                atlas that can be used for gameplay and debug purposes. 
+         *                Maybe good info to keep in mapdata for gameplay purposes, and can be used for debug visualization to see how 
+         *                the generator is carving up the map into different terrain zones.
+         *                    
+         *                      Need to consider cost / benefit off all added complexity and data size though, 
+         *                      maybe only do this for obstacles or only for walkable zones, or only keep track of the biggest X zones to limit data size.
+         */
+
         public void Generate(
             MapData data,
             int seed,
@@ -118,10 +158,11 @@ namespace AI_Workshop03
             MapReachability mapReach   // callback into BoardManager
         )
         {
-
             BeginBuild();
 
             BindMapData(data);
+            EnsureGenBuffers();
+
             InitRng(seed, orderSeed);
 
             terrainData ??= Array.Empty<TerrainTypeData>();
@@ -138,6 +179,7 @@ namespace AI_Workshop03
 
             int startIndex = CoordToIndexUnchecked(_width / 2, _height / 2);
 
+            // find a way to skip ResetToBase() on attempt 0 inside TryGenerateAttempts, how big cost win would that bring? 
             bool success = TryGenerateAttempts(
                 data,
                 obstaclesList,
@@ -158,6 +200,15 @@ namespace AI_Workshop03
             if (!success)
                 RunFallbackBranch(seed, terrainData, walkablesList, terrainDataId);
 
+
+            if (Debug_DumpFocusWeights)
+            {
+                // debug + sanity check that things work like I expect them to, not meant to be used by anything 
+                if (mapReach != null && EnsureWalkableStartIndex(ref startIndex))
+                {
+                    mapReach.BuildReachableFrom(data, startIndex, allowDiagonals);  // do one full BFS build on accepted map to mark reachable area for runtime use (doing multiple BFS checks during attempts can be costly on larger maps)
+                }
+            }
         }
 
 
@@ -284,38 +335,42 @@ namespace AI_Workshop03
             TerrainTypeData[] terrainData
         )
         {
-            EnsureGenBuffers();
+            //EnsureGenBuffers();       // calling once in Generate() before TryGenerateAttempts loop should be enough
 
             int attempts = Math.Max(1, maxGenerateAttempts);
 
             int minWalkableCells = ComputeMinWalkableCells(minUnblocked);
             float minReachable01 = Mathf.Clamp01(minReachablePercent);
 
-            for (int attempt = 0; attempt < attempts; attempt++)            // attempt placement loop, if it fails to meat the any prerequisite, generate a new map. 
+            for (int attempt = 0; attempt < attempts; attempt++)        // attempt placement loop, if it fails to meat the any prerequisite, generate a new map. 
             {
-                // Attempt 0: MapManager already initialized to base.
-                // Attempts 1+: must clear prior attempt.
-                if (attempt > 0)        // on attempt == 0 assumes the map was already initialized to base right before generation
-                    ResetToBase();
-                else
-                    _blockedCount = 0;  // should already be true, just to keep generator state coherent if MapManager already initialized base
+                ResetToBase();
 
                 _attemptsThisBuild++;
 
-                ApplyObstacleTerrains(obstaclesList, terrainDataId);        // obstacle placement before other terrain types
+                ApplyObstacleTerrains(obstaclesList, terrainDataId);    // obstacle placement before other terrain types
 
-                if (!EnsureWalkableStartIndex(ref startIndex))              // BuildReachableFrom() will need a valkable startIndex to validate the board 
+                if (!EnsureWalkableStartIndex(ref startIndex))          // BuildReachableFrom() will need a valkable startIndex to validate the board 
                     continue;
 
-                if (!MeetsUnblockedPercent(minWalkableCells, out int walkableCount))     // If map does not meet walkable space requirement, fail and try again
+                if (!MeetsUnblockedPercent(minWalkableCells, out int walkableCount))    // If map does not meet walkable space requirement, fail and try again
                     continue;
+
+                bool needsReachability = Mathf.Clamp01(minReachablePercent) > 0f;
+                if (mapReach == null)
+                {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                    if (needsReachability)
+                        Debug.LogWarning("MapGenerator: mapReach is null but minReachablePercent > 0. Reachability check will be skipped and maps may be disconnected.");
+#endif
+                }
 
                 if (!MeetsReachability(data, startIndex, walkableCount, minReachable01, allowDiagonals, mapReach))  // use startIndex to validate the board’s navigability,
                     continue;
 
 
-                // --- Successful Generation Branch ---                     // The generated map fullfils base requirements, continue to finnishing touches 
-                FinalizeWalkableTerrains(walkablesList, terrainDataId);     // reset walkable tiles to base visuals/cost/id so terrain can build from clean base
+                // --- Successful Generation Branch ---                         // The generated map fullfils base requirements, continue to finnishing touches 
+                FinalizeWalkableTerrains(walkablesList, terrainDataId);         // reset walkable tiles to base visuals/cost/id so terrain can build from clean base
 
                 // --- Generate Debug Data  ---
                 DumpDebugIfEnabled(seed, terrainData, fallbackBuilds: _usedFallbackThisBuild ? 1 : 0);   
@@ -365,7 +420,7 @@ namespace AI_Workshop03
         }
 
 
-        private bool MeetsUnblockedPercent(float minWalkableCells, out int walkableCount)   // NOTE: current design stops map from starting as fully blocked
+        private bool MeetsUnblockedPercent(int minWalkableCells, out int walkableCount)   // NOTE: current design stops map from starting as fully blocked
         {
             walkableCount = _cellCount - _blockedCount; 
             if (walkableCount <= 0) return false;
@@ -386,13 +441,26 @@ namespace AI_Workshop03
             // If reachability requirement is 0, accept without BFS
             if (minReachablePercentClamped <= 0f) return true;
 
-            int reachableCount = mapReach.BuildReachableFrom(data, startIndex, allowDiagonals);
+            if (mapReach == null)
+            {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                Debug.LogWarning("MapGenerator: skipping reachability check because mapReach is null.");
+#endif
+                return true; // keep generation running; strictness should be unchanged since I think it previously allowed null
+            }
 
             // Avoid division: reachableCount / (float)walkableCount >= p  <=>  reachableCount >= ceil(p * walkableCount)      
             // Previously:  float reachablePercent = reachableCount / (float)walkableCount;
-            int minReachableCells = Mathf.CeilToInt(minReachablePercentClamped * walkableCount);
+            int minReachableCells = Mathf.Clamp(
+                Mathf.CeilToInt(minReachablePercentClamped * walkableCount),
+                0, walkableCount
+            );
 
-            return reachableCount >= minReachableCells;
+            // if only need 0 or 1 reachable cell, and startIndex is ensured walkable, then this is trivially satisfied
+            if (minReachableCells <= 1) return true;
+
+            // do only partial BFS build to check if reachable cells meet the minReachableCells requirement, avoid full BFS build for performance if requirement is not met
+            return mapReach.HasAtLeastReachable(data, startIndex, allowDiagonals, minReachableCells);
         }
 
 
@@ -512,12 +580,26 @@ namespace AI_Workshop03
             for (int i = 0; i < cells.Count; i++)
             {
                 int index = cells[i];
-                if (!IsValidCell(index)) continue;
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                if (!IsValidCell(index)) continue;    // This should be safe to remove? All callers indices produced internally should already be valid, because they are generated from valid coords and neighbors.
+#endif
                 if (!CanUseCell(terrain, index)) continue;
 
                 if (terrain.AllowOverwriteObstacle && _blocked[index])
                     SetBlocked(index, false);
 
+                // NOTE:
+                //      TerrainID is the category enum (Land/Subterranean/Liquid/Air), not the unique terrain-rule identity.
+                //      This saets a groupng of terrain types, not the specific terrain type, so different terrain types that share the same TerrainID will be
+                //      grouped together for gameplay purposes (e.g. all Land terrains will share the same TerrainID even if they have different costs/colors/rules).
+                //
+                //      The terrainLayerId is computed and used only for _lastPaintLayerId, local for this generation of the map.
+                //      Identifying which terrain type is responsible for painting this cell, so it can be used for generation rules that
+                //      depend on "what was painted on this cell" (e.g. only paint this terrain on cells painted by that terrain,
+                //      or avoid painting on cells painted by that terrain).
+                //
+                //      _terrainTypeIds stores category, _lastPaintLayerId stores rule id
+                //      
                 _terrainTypeIds[index] = (byte)terrain.TerrainID;
                 _terrainCost[index] = terrain.Cost;
                 _baseColors[index] = terrain.Color;
@@ -533,7 +615,9 @@ namespace AI_Workshop03
                     break; // reached max blocked budget, early out stop
 
                 int index = cells[i];
-                if (!IsValidCell(index)) continue;
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                if (!IsValidCell(index)) continue;    // This should be safe to remove? All callers indices produced internally should already be valid, because they are generated from valid coords and neighbors.
+#endif
                 if (!CanUseCell(terrain, index)) continue;
 
                 if (_blocked[index])
@@ -541,6 +625,15 @@ namespace AI_Workshop03
 
                 SetBlocked(index, true);
 
+                // NOTE:
+                //      TerrainID is the category enum (Land/Subterranean/Liquid/Air), not the unique terrain-rule identity.
+                //      This saets a groupng of terrain types, not the specific terrain type, so different terrain types that share the same TerrainID will be
+                //      grouped together for gameplay purposes (e.g. all Land terrains will share the same TerrainID even if they have different costs/colors/rules).
+                //
+                //      The terrainLayerId is computed and used only for _lastPaintLayerId, local for this generation of the map.
+                //      Identifying which terrain type is responsible for painting this cell, so it can be used for generation rules that
+                //      depend on "what was painted on this cell" (e.g. only paint this terrain on cells painted by that terrain,
+                //      or avoid painting on cells painted by that terrain). 
                 _terrainTypeIds[index] = (byte)terrain.TerrainID;
                 _terrainCost[index] = 0;
                 _lastPaintLayerId[index] = terrainLayerId;
@@ -568,7 +661,8 @@ namespace AI_Workshop03
 
         private void ResetToBase()
         {
-            EnsureGenBuffers();
+            //EnsureGenBuffers();       // calling once in Generate() before TryGenerateAttempts loop should be enough
+            AssertBuffersReady(); 
 
             for (int i = 0; i < _cellCount; i++)
             {
@@ -729,8 +823,24 @@ namespace AI_Workshop03
         }
 
 
+        [System.Diagnostics.Conditional("UNITY_EDITOR")]
+        [System.Diagnostics.Conditional("DEVELOPMENT_BUILD")]
+        private void AssertBuffersReady()
+        {
+            if (_scratch.queue == null || _scratch.queue.Length != _cellCount)
+                throw new InvalidOperationException("Gen buffers not prepared. Call EnsureGenBuffers after BindMapData.");
+        }
+
 
         #endregion
+
+
+
+
+        private static void EnsureListCapacity(List<int> list, int needed)
+        {
+            if (needed > list.Capacity) list.Capacity = needed;
+        }
 
 
 

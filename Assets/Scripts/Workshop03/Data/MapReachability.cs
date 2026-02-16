@@ -35,8 +35,33 @@ namespace AI_Workshop03
         }
 
 
+
         // NOTE: Not an Atomic method, should only be exposed in a method that calles an Atomic method before this one?
         public int BuildReachableFrom(MapData data, int startIndex, bool allowDiagonals)
+            => BuildReachableFromInternal_StopAt(data, startIndex, allowDiagonals, stopAtCount: int.MaxValue);
+
+        /// <summary>
+        /// Returns true if reachable cells from start are at least minReachableCells.
+        /// NOTE: This may leave a PARTIAL stamp if it early-outs.
+        /// </summary>
+        public bool HasAtLeastReachable(MapData data, int startIndex, bool allowDiagonals, int minReachableCells)
+        {
+            if (data == null) throw new ArgumentNullException(nameof(data));
+
+            if (minReachableCells <= 0) return true; // requirement disabled
+            int cellCount = data.CellCount;
+            if ((uint)startIndex >= (uint)cellCount) return false;
+            if (data.IsBlocked[startIndex]) return false;
+
+            // clamp requirement to possible range
+            if (minReachableCells > cellCount) minReachableCells = cellCount;
+            if (minReachableCells <= 1) return true; // start cell counts as 1 (since already checked it's walkable, but if that changes in the future this can be a breaking point! Plan: make a separate version for obstacles reachability in future) 
+
+            int reached = BuildReachableFromInternal_StopAt(data, startIndex, allowDiagonals, stopAtCount: minReachableCells);
+            return reached >= minReachableCells;
+        }
+
+        public int BuildReachableFromInternal_StopAt(MapData data, int startIndex, bool allowDiagonals, int stopAtCount)
         {
             if (data == null) throw new ArgumentNullException(nameof(data));
 
@@ -47,6 +72,8 @@ namespace AI_Workshop03
 
             var blocked = data.IsBlocked;
             if (blocked[startIndex]) return 0;
+
+            if (stopAtCount <= 1) stopAtCount = 1;
 
             // Prevent stamp id overflow, rare but possible
             if (_reachStampId == int.MaxValue)
@@ -64,10 +91,12 @@ namespace AI_Workshop03
 
             int head = 0;   // index of the next item to dequeue
             int tail = 0;   // index where the next item will be enqueued
+
             queue[tail++] = startIndex;
             stampArr[startIndex] = stamp;
 
             int reachableCount = 1;
+            if (reachableCount >= stopAtCount) return reachableCount;
 
             while (head < tail)
             {
@@ -84,18 +113,18 @@ namespace AI_Workshop03
                     {
                         stampArr[ni] = stamp;
                         queue[tail++] = ni;
-                        reachableCount++;
+                        if (++reachableCount >= stopAtCount) return reachableCount;
                     }
                 }
 
-                if (x < width - 1)
+                if (x + 1 < width)
                 {
                     int ni = currentIndex + 1;
                     if (!blocked[ni] && stampArr[ni] != stamp)
                     {
                         stampArr[ni] = stamp;
                         queue[tail++] = ni;
-                        reachableCount++;
+                        if (++reachableCount >= stopAtCount) return reachableCount;
                     }
                 }
 
@@ -106,7 +135,7 @@ namespace AI_Workshop03
                     {
                         stampArr[ni] = stamp;
                         queue[tail++] = ni;
-                        reachableCount++;
+                        if (++reachableCount >= stopAtCount) return reachableCount;
                     }
                 }
 
@@ -117,7 +146,7 @@ namespace AI_Workshop03
                     {
                         stampArr[ni] = stamp;
                         queue[tail++] = ni;
-                        reachableCount++;
+                        if (++reachableCount >= stopAtCount) return reachableCount;
                     }
                 }
 
@@ -126,10 +155,10 @@ namespace AI_Workshop03
                 if (!allowDiagonals) continue;
 
                 // Corner rule: diagonal allowed only if at least one side is open
-                bool leftOpen = x > 0 && !blocked[currentIndex - 1];
+                bool leftOpen  = x > 0 && !blocked[currentIndex - 1];
                 bool rightOpen = x + 1 < width && !blocked[currentIndex + 1];
-                bool downOpen = y > 0 && !blocked[currentIndex - width];
-                bool upOpen = y + 1 < height && !blocked[currentIndex + width];
+                bool downOpen  = y > 0 && !blocked[currentIndex - width];
+                bool upOpen    = y + 1 < height && !blocked[currentIndex + width];
 
                 // Down-left
                 if (x > 0 && y > 0 && (leftOpen || downOpen))
@@ -139,7 +168,7 @@ namespace AI_Workshop03
                     {
                         stampArr[ni] = stamp;
                         queue[tail++] = ni;
-                        reachableCount++;
+                        if (++reachableCount >= stopAtCount) return reachableCount;
                     }
                 }
 
@@ -151,7 +180,7 @@ namespace AI_Workshop03
                     {
                         stampArr[ni] = stamp;
                         queue[tail++] = ni;
-                        reachableCount++;
+                        if (++reachableCount >= stopAtCount) return reachableCount;
                     }
                 }
 
@@ -163,7 +192,7 @@ namespace AI_Workshop03
                     {
                         stampArr[ni] = stamp;
                         queue[tail++] = ni;
-                        reachableCount++;
+                        if (++reachableCount >= stopAtCount) return reachableCount;
                     }
                 }
 
@@ -175,13 +204,14 @@ namespace AI_Workshop03
                     {
                         stampArr[ni] = stamp;
                         queue[tail++] = ni;
-                        reachableCount++;
+                        if (++reachableCount >= stopAtCount) return reachableCount;
                     }
                 }
             }
 
             return reachableCount;
         }
+
 
         // NOTE: Not an Atomic method, should only be exposed in a method that calles an Atomic method before this one?
         // pure stamp check

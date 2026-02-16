@@ -27,10 +27,16 @@ namespace AI_Workshop03
 
         [Header("Camera Follow")]
         [SerializeField] private FollowMode _followMode = FollowMode.None;
-        [SerializeField] private float _cellsPerScrollNotch = 2.5f; // tune (2–6 feels good)
         [SerializeField] private float _followSmooth = 8f;
         [SerializeField] private bool _keepOffsetOnSwitch = true;
         [SerializeField] private Vector3 _fixedOffset = new Vector3(0f, 8f, -8f);
+
+        [Header("Camera Zoom Input")]
+        [SerializeField] private float _cellsPerScrollNotch = 3f; // tune (2–6 feels good)
+        [SerializeField] private float _scrollSensitivity = 2f; // 1 = normal, try 3–10 if it feels slow
+
+        [Header("Camera Clamp")]
+        [SerializeField] private float _edgePaddingCells = 0.5f; // 0.0 = tight, 0.5 = show full edge cells, 1.0 = extra breathing room
 
         [Header("Camera Zoom (Ortho)")]
         [SerializeField] private float _cellSizeWorld = 1f;     // 1 if 1 cell = 1 Unity unit
@@ -297,8 +303,17 @@ namespace AI_Workshop03
             float scrollY = mouse.scroll.ReadValue().y;
             if (Mathf.Abs(scrollY) < 0.01f) return;
 
+            
             // Scroll direction: 
-            float notches = scrollY / 120f; // approx “clicks” on most mice
+            //float notches = scrollY / 120f; // approx “clicks” on most mice
+
+            // Treat scroll as "notches" but allow sensitivity scaling, 120 is common for wheel mice, but many devices differ.
+            float notches = (scrollY / 120f) * _scrollSensitivity;
+
+            // Alternative: treat scroll as a continuous value rather than discrete notches, should feel consistent across wheel vs trackpad for smoother zoom on high-res scroll devices. Tune sensitivity to adjust feel.
+            // float notches = (scrollY / Mathf.Max(1f, 120f)) * _scrollSensitivity; 
+
+
             _followViewCells = Mathf.Clamp(
                 _followViewCells - notches * _cellsPerScrollNotch,
                 _minViewCells,
@@ -318,12 +333,21 @@ namespace AI_Workshop03
             _cam.transform.rotation = Quaternion.Euler(90f, 0f, 0f);
 
             // Center above the grid
-            Vector3 center = _data.GridCenter;
-            _cam.transform.position = center + Vector3.up * _overviewHeight;
+            //Vector3 center = _data.GridCenter;
+            //_cam.transform.position = center + Vector3.up * _overviewHeight;
+
+            float halfCell = (_data != null ? _data.CellTileSize : 1f) * 0.5f;
+
+            float minXEdge = _data.MinWorld.x - halfCell;
+            float maxXEdge = _data.MaxWorld.x + halfCell;
+            float minZEdge = _data.MinWorld.z - halfCell;
+            float maxZEdge = _data.MaxWorld.z + halfCell;
 
             // Fit the whole board
-            float worldW = _data.MaxWorld.x - _data.MinWorld.x;
-            float worldH = _data.MaxWorld.z - _data.MinWorld.z;
+            float worldW = maxXEdge - minXEdge;
+            float worldH = maxZEdge - minZEdge;
+            //float worldW = _data.MaxWorld.x - _data.MinWorld.x;
+            //float worldH = _data.MaxWorld.z - _data.MinWorld.z;
 
             float halfW = worldW * 0.5f;
             float halfH = worldH * 0.5f;
@@ -333,9 +357,13 @@ namespace AI_Workshop03
             float sizeToFitWidth = halfW / aspect;
 
             _cam.orthographicSize = Mathf.Max(sizeToFitHeight, sizeToFitWidth) + _overviewPadding;
-
-            // Also sync follow target size baseline to current cam size
+            
+            // also sync follow target size baseline to current cam size
             _targetOrthoSize = _cam.orthographicSize;
+
+            // also center using edges, not GridCenter if/now when GridCenter is center-of-cells
+            Vector3 center = new Vector3((minXEdge + maxXEdge) * 0.5f, 0f, (minZEdge + maxZEdge) * 0.5f);
+            _cam.transform.position = center + Vector3.up * _overviewHeight;
         }
 
         private void ClearCameraFollow()
@@ -344,6 +372,8 @@ namespace AI_Workshop03
             _followMode = FollowMode.None;
         }
 
+
+        /*
         private Vector3 ClampCameraToMap(Vector3 desiredPos)
         {
             if (_cam == null) _cam = Camera.main;
@@ -359,6 +389,41 @@ namespace AI_Workshop03
 
             desiredPos.x = Mathf.Clamp(desiredPos.x, minX, maxX);
             desiredPos.z = Mathf.Clamp(desiredPos.z, minZ, maxZ);
+
+            return desiredPos;
+        }
+        */
+
+        private Vector3 ClampCameraToMap(Vector3 desiredPos)
+        {
+            if (_cam == null) _cam = Camera.main;
+            if (_cam == null || _data == null || !_cam.orthographic) return desiredPos;
+
+            //float halfH = _cam.orthographicSize;
+            //float halfW = halfH * _cam.aspect;
+
+            //float padWorld = _edgePaddingCells * _data.CellTileSize;
+            float halfCell = (_data != null ? _data.CellTileSize : 1f) * 0.5f;
+
+            float minXEdge = _data.MinWorld.x - halfCell;
+            float maxXEdge = _data.MaxWorld.x + halfCell;
+            float minZEdge = _data.MinWorld.z - halfCell;
+            float maxZEdge = _data.MaxWorld.z + halfCell;
+
+            float halfH = Mathf.Max(_cam.orthographicSize, _targetOrthoSize);
+            float halfW = halfH * _cam.aspect;
+
+            float minX = minXEdge + halfW;
+            float maxX = maxXEdge - halfW;
+            float minZ = minZEdge + halfH;
+            float maxZ = maxZEdge - halfH;
+
+            // If the view is bigger than the map on an axis, clamp to center on that axis.
+            if (minXEdge > maxXEdge) desiredPos.x = (_data.MinWorld.x + _data.MaxWorld.x) * 0.5f;
+            else desiredPos.x = Mathf.Clamp(desiredPos.x, minXEdge, maxXEdge);
+
+            if (minZEdge > maxZEdge) desiredPos.z = (_data.MinWorld.z + _data.MaxWorld.z) * 0.5f;
+            else desiredPos.z = Mathf.Clamp(desiredPos.z, minZEdge, maxZEdge);
 
             return desiredPos;
         }

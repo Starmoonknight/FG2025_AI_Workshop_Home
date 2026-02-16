@@ -415,8 +415,8 @@ MonoBehaviour:
   _mapManager: {fileID: 925457158}
   _mapRenderer2D: {fileID: 925457160}
   _allowDiagonals: 1
-  _searchDelay: 0.01
-  _pathDelay: 0.005
+  _searchDelay: 0.008
+  _pathDelay: 0.004
   _spreadOverlayStrength: 0.35
   _pathOverlayStrength: 0.5
   _triedColor:
@@ -695,15 +695,15 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e1e7aa31ef8f20941bd445fd4533e5f4, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AI_Workshop03.MapManager
-  _mainCamera: {fileID: 0}
+  _mainCamera: {fileID: 1352866328}
   _cameraPadding: 1
-  _boardRenderer: {fileID: 0}
-  _width: 10
-  _height: 10
+  _boardRenderer: {fileID: 1701607533}
+  _width: 100
+  _height: 100
   _baseTerrainCost: 10
   _allowDiagonalTraversal: 1
-  _seed: 0
-  _lastGeneratedSeed: 0
+  _seed: 187867250
+  _lastGeneratedSeed: 187867250
   _minUnblockedPercent: 0.5
   _minReachablePercent: 0.75
   _maxGenerateAttempts: 50
@@ -714,7 +714,7 @@ MonoBehaviour:
   - {fileID: 11400000, guid: 2760062d48b5080438cf969619346f7d, type: 2}
   - {fileID: 11400000, guid: e77050331e772384a9120e7126f8def3, type: 2}
   _renderer2D: {fileID: 925457160}
-  _worldObjects: {fileID: 0}
+  _worldObjects: {fileID: 925457161}
   _walkableColor:
     serializedVersion: 2
     rgba: 4294967295
@@ -725,7 +725,7 @@ MonoBehaviour:
   _seedHudLabel: {fileID: 332636614}
   _seedHudPrefix: 'Seed: '
   _dumpFocusWeights: 1
-  _dumpFocusWeightsVerbose: 0
+  _dumpFocusWeightsVerbose: 1
   _logGenerationSeed: 1
   _showDebugCosts: 0
   _costLabelPrefab: {fileID: 6433729425798609155, guid: f2738bf5725d73e47b3baf4e4a0218dc, type: 3}
@@ -1064,6 +1064,11 @@ Transform:
   m_Children: []
   m_Father: {fileID: 925457159}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!23 &1701607533 stripped
+MeshRenderer:
+  m_CorrespondingSourceObject: {fileID: 3885641546873383699, guid: 4e1156dbd030d1140ba1cd7d7fdbb253, type: 3}
+  m_PrefabInstance: {fileID: 7347946356751452806}
+  m_PrefabAsset: {fileID: 0}
 --- !u!1001 &2647801867824992714
 PrefabInstance:
   m_ObjectHideFlags: 0

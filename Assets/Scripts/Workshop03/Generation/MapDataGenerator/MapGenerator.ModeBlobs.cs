@@ -18,6 +18,7 @@ namespace AI_Workshop03
             int desiredCells = Mathf.RoundToInt(terrain.CoveragePercent * _cellCount);
             if (desiredCells <= 0) return;
 
+            EnsureListCapacity(outCells, desiredCells);
             EnsureGenBuffers();
 
             // a shared memory stamp for this terrain to keep from overlapping blobs
@@ -64,6 +65,7 @@ namespace AI_Workshop03
 
 
                 _scratch.temp.Clear();
+                EnsureListCapacity(_scratch.temp, size);   // size == maxCells upper bound
                 ExpandRandomBlob(terrain, seed, size, unionId, _scratch.temp);
 
                 // if blob could not grow any cells, stop looping
@@ -85,6 +87,9 @@ namespace AI_Workshop03
             if (!IsValidCell(seedIndex)) return;
             if (!CanUseCell(terrain, seedIndex)) return;
 
+            maxCells = Mathf.Clamp(maxCells, 1, _cellCount);
+            EnsureListCapacity(outCells, maxCells);
+
             EnsureGenBuffers();
 
             if (_scratch.used[seedIndex] == unionId)
@@ -100,60 +105,99 @@ namespace AI_Workshop03
             _scratch.queue[tail++] = seedIndex;
             outCells.Add(seedIndex);
 
+            maxCells = Mathf.Clamp(maxCells, 1, _cellCount);
+
             float growChance = Mathf.Clamp01(terrain.Blob.GrowChance);
-            int smoothPasses = terrain.Blob.SmoothPasses;
-            maxCells = Mathf.Max(1, maxCells);
+
+            int requestedSmooth = terrain.Blob.SmoothPasses;
+            // cap grows slowly with blob size, hard limit to prevent extreme cases from causing perf issues, 16 is a randomly choosen number, but should be diminishing returns after 8~ish passes
+            // (maxCells ~ 100 -> cap ~ 1), (maxCells ~ 1,600 -> cap ~ 2), (maxCells ~ 6,400 -> cap ~ 4), (maxCells ~ 25,600 -> cap ~ 8), (maxCells ~ 102,400 -> cap ~ 16)
+            int smoothCapRaw = Mathf.CeilToInt(Mathf.Sqrt(maxCells) * 0.05f);
+            int smoothCap = Mathf.Clamp(smoothCapRaw, 0, 16);
+            int smoothPasses = Mathf.Clamp(requestedSmooth, 0, smoothCap);
+
+            int w = _width;
+            int h = _height;
 
             // BFS-like growth
             while (head < tail && outCells.Count < maxCells)
             {
                 int current = _scratch.queue[head++];
-                IndexToXY(current, out int x, out int y);
 
-                for (int neighbor = 0; neighbor < Neighbors4.Length; neighbor++)
+                int y = current / w;
+                int x = current - (y * w);
+                                
+                if (x > 0)      // Left    
                 {
-                    var (dirX, dirY) = Neighbors4[neighbor];
-                    if (!TryCoordToIndex(x + dirX, y + dirY, out int next)) continue;
-
-                    if (_scratch.stamp[next] == stampId) continue;  // allready in this blob
-                    if (_scratch.used[next] == unionId) continue;   // already part of a previous blob of same terrain
-                    if (!CanUseCell(terrain, next)) continue;
-                    if (_rng.NextDouble() > growChance) continue;
-
-                    _scratch.stamp[next] = stampId;
-                    _scratch.used[next] = unionId;
-                    _scratch.queue[tail++] = next;
-                    outCells.Add(next);
-
+                    TryGrow(current - 1);
+                    if (outCells.Count >= maxCells) break;
+                }            
+                if (x + 1 < w)  // Right  
+                {
+                    TryGrow(current + 1);
+                    if (outCells.Count >= maxCells) break;
+                }              
+                if (y > 0)      // Down   
+                {
+                    TryGrow(current - w);
+                    if (outCells.Count >= maxCells) break;
+                }             
+                if (y + 1 < h)  // Up
+                {
+                    TryGrow(current + w);
                     if (outCells.Count >= maxCells) break;
                 }
+            }
+
+            bool TryGrow(int next)
+            {
+                if (outCells.Count >= maxCells) return false;       // hard stop
+                if (_scratch.stamp[next] == stampId) return false;  // allready in this blob
+                if (_scratch.used[next] == unionId) return false;   // already part of a previous blob of same terrain
+                if (!CanUseCell(terrain, next)) return false;
+                if (_rng.NextDouble() > growChance) return false;
+
+                _scratch.stamp[next] = stampId;
+                _scratch.used[next] = unionId;
+                _scratch.queue[tail++] = next;
+                outCells.Add(next);
+                return true;
             }
 
             // Smoothing passes to fill in small gaps
             for (int pass = 0; pass < smoothPasses; pass++)
             {
-                int before = outCells.Count;
-                for (int i = 0; i < before; i++) _scratch.queue[i] = outCells[i];
+                if (outCells.Count >= maxCells) break;
 
-                for (int i = 0; i < before && outCells.Count < maxCells; i++)
+                int beforeCount = outCells.Count;
+                for (int i = 0; i < beforeCount; i++) _scratch.queue[i] = outCells[i];
+
+                for (int i = 0; i < beforeCount && outCells.Count < maxCells; i++)
                 {
                     int current = _scratch.queue[i];
-                    IndexToXY(current, out int x, out int y);
-
-                    for (int neighbor = 0; neighbor < Neighbors4.Length && outCells.Count < maxCells; neighbor++)
-                    {
-                        var (dirX, dirY) = Neighbors4[neighbor];
-                        if (!TryCoordToIndex(x + dirX, y + dirY, out int next)) continue;
-
-                        if (_scratch.stamp[next] == stampId) continue;
-                        if (_scratch.used[next] == unionId) continue;
-                        if (!CanUseCell(terrain, next)) continue;
-
-                        _scratch.stamp[next] = stampId;
-                        _scratch.used[next] = unionId;
-                        outCells.Add(next);
-                    }
+                    int y = current / w;
+                    int x = current - (y * w);
+                                        
+                    if (x > 0)     TrySmooth(current - 1);  // Left                    
+                    if (x + 1 < w) TrySmooth(current + 1);  // Right                    
+                    if (y > 0)     TrySmooth(current - w);  // Down                    
+                    if (y + 1 < h) TrySmooth(current + w);  // Up
                 }
+
+                // If this pass added nothing, further passes probably won't help
+                if (outCells.Count == beforeCount) break;
+            }
+
+            void TrySmooth(int next)
+            {
+                if (outCells.Count >= maxCells) return;
+                if (_scratch.stamp[next] == stampId) return;
+                if (_scratch.used[next] == unionId) return;
+                if (!CanUseCell(terrain, next)) return;
+
+                _scratch.stamp[next] = stampId;
+                _scratch.used[next] = unionId;
+                outCells.Add(next);
             }
         }
 

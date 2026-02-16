@@ -228,6 +228,11 @@ namespace AI_Workshop03
             // Grid origin is bottom left corner in world space
             Vector3 gridOrigin = _boardRenderer.transform.position - new Vector3(worldW * 0.5f, 0f, worldH * 0.5f);
 
+
+            // NOTE:  I wan't to add the coords for MinWorld MaxWorld to double check their position and the grids size,
+            //        might currently be placed on cell center / last index world-pos and not edge
+            //          cell centers (eg x=0.5..width-0.5), not the outer edges (0..width).
+
             m_data.SetMapMeta(
                 buildId: m_mapBuildId,
                 mapGenSeed: baseSeed,
@@ -242,9 +247,16 @@ namespace AI_Workshop03
 
         }
 
+
         // NEW
         private void HandleMapRebuiltInternal()
         {
+
+            Debug.Log($"MinWorld={m_data.MinWorld} MaxWorld={m_data.MaxWorld} CellSize={m_data.CellTileSize} W={m_data.Width} H={m_data.Height}");
+            Debug.Log($"Expected size (cells*cellSize): X={m_data.Width * m_data.CellTileSize} Z={m_data.Height * m_data.CellTileSize}");
+            Debug.Log($"Reported size: X={m_data.MaxWorld.x - m_data.MinWorld.x} Z={m_data.MaxWorld.z - m_data.MinWorld.z}");
+
+
             FitCameraOrthoTopDown();
 
             // 1) Data is valid right now

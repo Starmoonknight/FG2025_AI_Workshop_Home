@@ -141,7 +141,8 @@ namespace AI_Workshop03
         {
             index = -1;
 
-            int fallbackTries = Mathf.Max(8, tries / 2);    // protects against: tries/2 can become 0 wherepick loops would never run
+            tries = Mathf.Max(1, tries);
+            int fallbackTries = Mathf.Max(8, tries / 2);    // protects against: tries/2 can become 0 where pick loops would never run
 
             switch (focusArea)
             {
@@ -201,7 +202,7 @@ namespace AI_Workshop03
             }
         }
 
-        private bool TryPickCell_NearExisting(List<int> chosen, int poolId, int radius, int tries, out int result,
+        private bool TryPickCell_NearExisting(TerrainTypeData terrain, List<int> chosen, int poolId, int radius, int tries, out int result,
             ExpansionAreaFocus focusArea = ExpansionAreaFocus.Anywhere, int interiorMargin = 0)
         {
 
@@ -215,6 +216,7 @@ namespace AI_Workshop03
                 focusArea = ExpansionAreaFocus.Anywhere;
             }
 
+            if (chosen == null || chosen.Count == 0) return false;
 
             for (int i = 0; i < tries; i++)
             {
@@ -231,9 +233,13 @@ namespace AI_Workshop03
 
                 if ((uint)x >= (uint)_width || (uint)y >= (uint)_height) continue;
 
-
                 int candIdx = CoordToIndexUnchecked(x, y);
+
+                // enforce pool membership, only pick from cells that are currently in the pool
                 if (_scratch.used[candIdx] != poolId) continue;
+
+                // safety against pooled cell becoming an invalid option between pick and use
+                if (!CanPickCell(terrain, candIdx)) continue;   // need to choose between this and or CanUseCell depending on intent, probably keep the picker version 
 
                 // enforce focus region, if terrain uses that
                 if (!MatchesFocus(candIdx, focusArea, interiorMargin)) continue;

@@ -460,10 +460,13 @@ MonoBehaviour:
   _seedHudPrefix: 'Seed: '
   _dumpFocusWeights: 0
   _dumpFocusWeightsVerbose: 0
+  _logGenerationSeed: 1
   _showDebugCosts: 0
   _costLabelPrefab: {fileID: 6433729425798609155, guid: f2738bf5725d73e47b3baf4e4a0218dc, type: 3}
   _costLabelRoot: {fileID: 1524415437}
   _costLabelOffsetY: 0.05
+  _maxCostLabelUpdatesPerFrame: 300
+  _onlyUpdateCostTextWhenChanged: 1
 --- !u!4 &925457159
 Transform:
   m_ObjectHideFlags: 0
@@ -898,10 +901,12 @@ MonoBehaviour:
     m_Flags: 0
   _agent: {fileID: 2647801867824992716}
   _followMode: 0
-  _cellsPerScrollNotch: 2.5
   _followSmooth: 8
   _keepOffsetOnSwitch: 1
   _fixedOffset: {x: 0, y: 8, z: -8}
+  _cellsPerScrollNotch: 5
+  _scrollSensitivity: 2
+  _edgePaddingCells: 0.5
   _cellSizeWorld: 1
   _followViewCells: 15
   _overviewPadding: 1.5
