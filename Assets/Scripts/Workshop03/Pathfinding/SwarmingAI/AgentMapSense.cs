@@ -1,6 +1,4 @@
 using System;
-using System.Collections.Generic;
-using AI_Workshop02;
 using UnityEngine;
 
 
@@ -83,6 +81,7 @@ namespace AI_Workshop03.AI
         private void HandleMapRebuilt(MapData data)
         {
             _data = data;
+
             OnDataChanged?.Invoke(_data);
         }
 

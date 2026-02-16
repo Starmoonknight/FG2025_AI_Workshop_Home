@@ -47,6 +47,9 @@ namespace AI_Workshop03
         {
             index = -1;
 
+            if (_cellCount <= 0) return false;
+            if (!HasAnyWalkable) return false;
+
             for (int t = 0; t < tries; t++)
             {
                 int i = _rng.Next(0, _cellCount);
@@ -63,6 +66,10 @@ namespace AI_Workshop03
         private bool TryPickCell_Anywhere(TerrainTypeData terrain, out int index, int tries)
         {
             index = -1;
+            if (_cellCount <= 0) return false;
+
+            if (terrain.ForceUnblockedSeed && !HasAnyWalkable)
+                return false;
 
             for (int t = 0; t < tries; t++)
             {
@@ -203,7 +210,7 @@ namespace AI_Workshop03
         }
 
         private bool TryPickCell_NearExisting(TerrainTypeData terrain, List<int> chosen, int poolId, int radius, int tries, out int result,
-            ExpansionAreaFocus focusArea = ExpansionAreaFocus.Anywhere, int interiorMargin = 0)
+            ExpansionAreaFocus focusArea = ExpansionAreaFocus.Anywhere, int focusThickness = 0)
         {
 
             result = -1;
@@ -242,7 +249,7 @@ namespace AI_Workshop03
                 if (!CanPickCell(terrain, candIdx)) continue;   // need to choose between this and or CanUseCell depending on intent, probably keep the picker version 
 
                 // enforce focus region, if terrain uses that
-                if (!MatchesFocus(candIdx, focusArea, interiorMargin)) continue;
+                if (!MatchesFocus(candIdx, focusArea, focusThickness)) continue;
 
                 result = candIdx;
                 return true;
@@ -293,10 +300,10 @@ namespace AI_Workshop03
 
             switch (side)
             {
-                case 0: x = _rng.Next(0, band); y = _rng.Next(0, _height); break;              // left
-                case 1: x = _rng.Next(_width - band, _width); y = _rng.Next(0, _height); break;              // right
-                case 2: x = _rng.Next(0, _width); y = _rng.Next(0, band); break;              // bottom
-                default: x = _rng.Next(0, _width); y = _rng.Next(_height - band, _height); break;  // top
+                case 0: x = _rng.Next(0, band); y = _rng.Next(0, _height); break;                   // left
+                case 1: x = _rng.Next(_width - band, _width); y = _rng.Next(0, _height); break;     // right
+                case 2: x = _rng.Next(0, _width); y = _rng.Next(0, band); break;                    // bottom
+                default: x = _rng.Next(0, _width); y = _rng.Next(_height - band, _height); break;   // top
             }
 
             int candIdx = CoordToIndexUnchecked(x, y);
@@ -360,7 +367,7 @@ namespace AI_Workshop03
 
         private bool TryPickFromPool_ByFocus(
             ExpansionAreaFocus focusArea,   // expected: Edge/Interior/Anywhere   DO NOT call with ExpansionAreaFocus.Weighted
-            int interiorMargin,
+            int focusThickness,
             int tries,
             out int idx)
         {
@@ -391,7 +398,7 @@ namespace AI_Workshop03
             for (int i = 0; i < tries; i++)
             {
                 int candIdx = _scratch.temp[_rng.Next(0, count)];
-                if (!MatchesFocus(candIdx, focusArea, interiorMargin)) continue;
+                if (!MatchesFocus(candIdx, focusArea, focusThickness)) continue;
                 idx = candIdx;
                 return true;
             }
@@ -416,6 +423,13 @@ namespace AI_Workshop03
             return x == 0 || y == 0 || x == _width - 1 || y == _height - 1;
         }
 
+        private bool IsEdgeBandCell(int idx, int band)
+        {
+            if (band <= 1) return IsEdgeCell(idx); // fallback
+            IndexToXY(idx, out int x, out int y);
+            return x < band || x >= _width - band || y < band || y >= _height - band;
+        }
+
         private bool IsInteriorCell(int idx, int interiorMargin)
         {
             int m = Mathf.Clamp(interiorMargin, 0, Mathf.Min(_width, _height) / 2);
@@ -427,14 +441,24 @@ namespace AI_Workshop03
             return x >= m && x < _width - m && y >= m && y < _height - m;
         }
 
-        private bool MatchesFocus(int idx, ExpansionAreaFocus focus, int interiorMargin)
+        private bool MatchesFocus(int idx, ExpansionAreaFocus focus, int focusThickness)
         {
             switch (focus)
             {
-                case ExpansionAreaFocus.Edge: return IsEdgeCell(idx);
-                case ExpansionAreaFocus.Interior: return IsInteriorCell(idx, interiorMargin);
+                case ExpansionAreaFocus.Edge: 
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                    if (focusThickness <= 0)
+                        Debug.LogWarning("MatchesFocus Edge called with band<=0 (degenerates to edge line). Check weight config.");
+#endif
+                    return IsEdgeBandCell(idx, focusThickness);
+
+
+                case ExpansionAreaFocus.Interior: 
+                    return IsInteriorCell(idx, focusThickness);
+
                 case ExpansionAreaFocus.Anywhere:
-                default: return true;
+                default: 
+                    return true;
             }
         }
 
@@ -498,6 +522,10 @@ namespace AI_Workshop03
         private void RemoveFromPool(int idx, int poolMark)
         {
             if (_scratch.used[idx] != poolMark) return;
+
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            if (poolMark == 0) Debug.LogError("RemoveFromPool called without pool indexing enabled.");
+#endif
 
             int pos = _scratch.poolPos[idx];
             int lastPos = _scratch.temp.Count - 1;

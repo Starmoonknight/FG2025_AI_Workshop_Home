@@ -17,6 +17,34 @@ namespace AI_Workshop03
     public sealed partial class MapGenerator                       // NOTE: the class was a public sealed class before I changed it to became partial, can thosde two keywords coexist?
     {
 
+
+        private enum FailGate : byte
+        {
+            None,
+            NoWalkableSeed,
+            UnblockedTooLow,
+            ReachabilityTooLow
+        }
+
+        private struct AttemptStats
+        {
+            public int attempt;
+            public FailGate gate;
+
+            public int blocked, maxBlocked;
+            public int walkable, minWalkable;
+
+            public int minReachableCells;
+            public int reached;     // -1 if not measured yet
+
+            public int touched;
+
+            public float msObstacles;
+            public float msBfs;
+            public float msFinalize;
+        }
+
+
         private sealed class GenScratch
         {
             public int[] heat;      // temp int storage
@@ -28,8 +56,12 @@ namespace AI_Workshop03
             public int stampId;
 
             public int[] stamp;     // stamp based marker
-            public int[] used;      // stamp based marker
-            
+            public int[] used;      // stamp based marker. Only compare to the current id. Never check != 0
+
+            public List<int> touched = new(4096);   // buffer for stamp-based undo
+            public int[] touchedStamp;
+            public int touchedStampId;  
+
             public readonly List<int> cells = new(4096);
             public readonly List<int> temp = new(2048);     // buffer
         }
@@ -45,7 +77,7 @@ namespace AI_Workshop03
         private int _blockedCount;
         private int _maxBlockedBudget;
 
-        // Board array references
+        // Board array references      DO NOT WRITE DIRECTLY!!! — use PaintTerrainCell/PaintObstacleCell/SetBlocked
         private bool[] _blocked;
         private int[] _terrainCost;
         private Color32[] _baseColors;
@@ -76,6 +108,14 @@ namespace AI_Workshop03
         private static readonly MapGenDebugReporter _debugReporter = new MapGenDebugReporter();
 
 
+
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        private const int TelemetryRing = 32;
+        private readonly AttemptStats[] _telemetry = new AttemptStats[TelemetryRing];
+        private int _telemetryWrite;
+#endif
+
+
         #endregion
 
 
@@ -96,6 +136,11 @@ namespace AI_Workshop03
 
         // Helper: get opposite side index
         private static int OppositeSide(int side) => side ^ 1; // 0<->1, 2<->3
+
+
+        private int WalkableCount => _cellCount - _blockedCount;
+
+        private bool HasAnyWalkable => _blockedCount < _cellCount;
 
 
         #endregion
@@ -144,7 +189,53 @@ namespace AI_Workshop03
          *                    
          *                      Need to consider cost / benefit off all added complexity and data size though, 
          *                      maybe only do this for obstacles or only for walkable zones, or only keep track of the biggest X zones to limit data size.
+         *      
+         *  
+         *  // TODO: 
+         *           Edge-band consistency: “Edge” must mean band everywhere (pool + pickers), not 1-cell border.
+         *           // NOTE: Fix semantic mismatch later; don’t mix into retry/telemetry work.
+         *           
+         *           
+         *           Semantic risk: 
+         *                          Now using the same numeric thickness for both:
+         *                              - Edge band thickness 
+         *                              - Interior margin thickness
+         *                          
+         *                          Works because weights only expose one margin concept anyway. But it creates the constraint,
+         *                          if later you want EdgeBand=6 but InteriorMargin=12, current API cannot express that without splitting the value.
+         *                              If I get around to needing them as seperate values, can consider to do:
+         *                              - Adding weights like EdgeBandPercent/EdgeMinBand later and then make ComputeEdgeBandCells() truly edge-specific.
+         *  
+         *  
+         *  
+         *  // TODO: 
+         *           Commit-on-success: Commit-on-success means: generate attempts into scratch arrays, and only copy into MapData on success.
+         *           
+         *           Pros
+         *           - Clean correctness model: MapData only ever contains “accepted” state.
+         *           - No per-attempt reset in MapData.
+         *           - Easy to save “best attempt snapshot” (you already have the scratch state).
+         *           
+         *           Cons
+         *           - More refactor: all your generator code must write into “active buffers” (scratch), not directly into MapData arrays.
+         *           - Extra memory: duplicates of the big arrays.
+         *              - Rough ballpark for 1,000,000 cells:
+         *                  - bool[] ~ 1 MB (implementation dependent)
+         *                  - int[] ~ 4 MB
+         *                  - Color32[] ~ 4 MB
+         *                  - byte[] ~ 1 MB each
+         *                  Total per set roughly ~11–12 MB + overhead; duplicating is usually acceptable on desktop, but still real.           
+         *  
+         *           Commit-on-success is the cleanest long-term, but it’s a bigger rewrite and you’ll likely do it only once you’re confident your 
+         *           generation rules are stable and you want “best attempt replay/snapshots” as a first-class thing. 
+         *          
+         *           Hybrid option (often best):
+         *            - Do touched-undo now.     - DONE
+         *            - Later, when you want heavy telemetry + replay + storing “closest attempt map”, consider commit-on-success.
+         *  
          */
+
+
 
         public void Generate(
             MapData data,
@@ -161,6 +252,7 @@ namespace AI_Workshop03
             BeginBuild();
 
             BindMapData(data);
+
             EnsureGenBuffers();
 
             InitRng(seed, orderSeed);
@@ -192,6 +284,7 @@ namespace AI_Workshop03
                 mapReach,
                 ref startIndex,
                 seed,
+                orderSeed,
                 terrainData
             );
 
@@ -247,8 +340,11 @@ namespace AI_Workshop03
 
         private void InitRng(int seed, int orderSeed)
         {
-            _rng = new System.Random(seed);
+            // order should be stable for whole build
             _rngOrder = new System.Random(orderSeed);
+
+            // default, will be overwritten per-attempt anyway 
+            _rng = new System.Random(seed);
         }
 
         // --- Compute max blocked budget based on min unblocked percent ---
@@ -332,6 +428,7 @@ namespace AI_Workshop03
             MapReachability mapReach,
             ref int startIndex,
             int seed,
+            int orderSeed,  
             TerrainTypeData[] terrainData
         )
         {
@@ -342,19 +439,90 @@ namespace AI_Workshop03
             int minWalkableCells = ComputeMinWalkableCells(minUnblocked);
             float minReachable01 = Mathf.Clamp01(minReachablePercent);
 
-            for (int attempt = 0; attempt < attempts; attempt++)        // attempt placement loop, if it fails to meat the any prerequisite, generate a new map. 
-            {
-                ResetToBase();
+            int successAttempt = -1;
 
+            for (int attempt = 0; attempt < attempts; attempt++)        // attempt placement loop, if it fails to meat the any prerequisite, generate a new map.
+            {
+                AttemptStats stats = default; stats.attempt = attempt; stats.maxBlocked = _maxBlockedBudget; stats.minWalkable = minWalkableCells;
+
+
+                // WARNING: touched undo works if this  ResetToBase() / UndoTouchedToBase() logic is correct,
+                // be careful when refactoring and consider implications on the undo logic when making changes here.
+                // Current precondition:
+                //      Every attempt starts from base state, and
+                //      Every cell modification during an attempt calls Touch(idx) before/when writing, and
+                //      Base map is truly unblocked, because I hard-reset _blockedCount = 0 as the map generator can only handle walkable as base tiles.
+
+                // Invariant: each attempt begins from the base map state.
+                // Attempt 0: full reset. Attempts 1+: undo only what prior attempt touched
+                if (attempt == 0) ResetToBase();                        // first attempt, start from a clean slate by resetting the whole map to base
+                else UndoTouchedToBase();                               // undo previous failed attempt writes instead of doing a full ResetToBase() call
+
+
+                // DEV NOTE: Current map is only designed to take in a base map with no blocked cells, if there are blocked cells in the base map,
+                //           the generator will count those against the blocked budget and may fail to generate a valid map.
+                //           Can add a pre-processing step to clear blocked cells from the base map if needed,
+                //           but for now just assert that the base map is unblocked for sanity sake.
+                AssertAttemptStartsFromUnblockedBase();    
+                //
+                //      If later support base has some blocked: Capture int _baseBlockedCount once after BindMapData / after initial ResetToBase(), and set _blockedCount = _baseBlockedCount on undo.
+                //
+                //      Future plan: can consider supporting blocked cells in the base map, but it will add complexity to the
+                //      generator logic and may require a different approach to obstacle placement and blocked budget management.
+                //      Will require larger refactory to support, so for now just assert that the base map is unblocked and
+                //      consider this a potential future improvement if there is time and need for it.
+
+                BeginAttempt();                                         // set stamp id + clear touched list
+
+                // Per-attempt placement RNG: Should be stable with "seed reproduces map", but different across attempts to give the generator a chance to try different placements.    (placement randomness inside attempt N is deterministic and reproducible)
+                _rng = new System.Random(unchecked(seed ^ ((int)0x9E3779B9 * (attempt + 1))));
                 _attemptsThisBuild++;
 
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                // Cheap integrity spot-check, could run every attempt, but limited it for now.  
+                if ((attempt & 7) == 0)                                 // runs every 8th attempt
+                {
+                    int recomputedBlocked = 0;
+                    int nonBasePaint = 0;
+
+                    for (int i = 0; i < _cellCount; i++)
+                    {
+                        if (_blocked[i]) recomputedBlocked++;
+                        if (_lastPaintLayerId[i] != 0) nonBasePaint++;
+                    }
+
+                    if (recomputedBlocked != _blockedCount)
+                        Debug.LogError($"BlockedCount mismatch after reset/undo: {recomputedBlocked} vs _blockedCount: {_blockedCount}");
+
+                    if (nonBasePaint != 0)
+                        Debug.LogError($"Undo/reset integrity: found {nonBasePaint} cells with LastPaintLayerId != 0 after reset/undo. Likely missing Touch() on some write.");
+                }
+#endif
+
                 ApplyObstacleTerrains(obstaclesList, terrainDataId);    // obstacle placement before other terrain types
+                stats.blocked = _blockedCount; stats.touched = _scratch.touched.Count;
 
                 if (!EnsureWalkableStartIndex(ref startIndex))          // BuildReachableFrom() will need a valkable startIndex to validate the board 
-                    continue;
+                {
+                    stats.gate = FailGate.NoWalkableSeed; RecordAttempt(stats); continue;
+                }
 
                 if (!MeetsUnblockedPercent(minWalkableCells, out int walkableCount))    // If map does not meet walkable space requirement, fail and try again
-                    continue;
+                {
+                    stats.gate = FailGate.UnblockedTooLow; RecordAttempt(stats); continue;
+                }
+
+                int minReachableCells = Mathf.Clamp(
+                    Mathf.CeilToInt(minReachable01 * walkableCount),
+                    0, walkableCount
+                );
+                stats.minReachableCells = minReachableCells;
+
+                if (!MeetsReachability(data, startIndex, walkableCount, minReachable01, allowDiagonals, mapReach, out stats.reached))  // use startIndex to validate the board’s navigability,
+                {
+                    stats.gate = FailGate.ReachabilityTooLow; RecordAttempt(stats); continue;
+                }
+
 
                 bool needsReachability = Mathf.Clamp01(minReachablePercent) > 0f;
                 if (mapReach == null)
@@ -365,20 +533,33 @@ namespace AI_Workshop03
 #endif
                 }
 
-                if (!MeetsReachability(data, startIndex, walkableCount, minReachable01, allowDiagonals, mapReach))  // use startIndex to validate the board’s navigability,
-                    continue;
-
 
                 // --- Successful Generation Branch ---                         // The generated map fullfils base requirements, continue to finnishing touches 
                 FinalizeWalkableTerrains(walkablesList, terrainDataId);         // reset walkable tiles to base visuals/cost/id so terrain can build from clean base
+                stats.gate = FailGate.None; RecordAttempt(stats);
+
+                if (mapReach != null && EnsureWalkableStartIndex(ref startIndex))
+                {
+                    mapReach.BuildReachableFrom(data, startIndex, allowDiagonals); // full BFS
+                }
 
                 // --- Generate Debug Data  ---
-                DumpDebugIfEnabled(seed, terrainData, fallbackBuilds: _usedFallbackThisBuild ? 1 : 0);   
+                DumpDebugIfEnabled(seed, terrainData, fallbackBuilds: _usedFallbackThisBuild ? 1 : 0);
+                successAttempt = attempt;
+
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                Debug.Log($"[MapGen] baseSeed={seed} orderSeed={orderSeed} successAttempt={successAttempt} attemptsUsed={_attemptsThisBuild}");
+#endif
                 return true;
             }
 
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            Debug.Log($"[MapGen] baseSeed={seed} orderSeed={orderSeed} FAILED attemptsUsed={_attemptsThisBuild}");
+#endif
+
             return false;
         }
+
 
         private void ApplyObstacleTerrains(
             List<TerrainTypeData> obstaclesList,
@@ -404,6 +585,9 @@ namespace AI_Workshop03
         // that BFS needs a walkable starting node to measure “how connected is this map” from center,
         private bool EnsureWalkableStartIndex(ref int startIndex)
         {
+            if (_cellCount <= 0) return false;
+            if (!HasAnyWalkable) return false;
+
             if (!_blocked[startIndex])
                 return true;
 
@@ -422,7 +606,7 @@ namespace AI_Workshop03
 
         private bool MeetsUnblockedPercent(int minWalkableCells, out int walkableCount)   // NOTE: current design stops map from starting as fully blocked
         {
-            walkableCount = _cellCount - _blockedCount; 
+            walkableCount = WalkableCount; 
             if (walkableCount <= 0) return false;
 
             return walkableCount >= minWalkableCells;
@@ -435,9 +619,12 @@ namespace AI_Workshop03
             int walkableCount,
             float minReachablePercentClamped,
             bool allowDiagonals,
-            MapReachability mapReach
+            MapReachability mapReach,
+            out int reached
         )
         {
+            reached = -1; 
+
             // If reachability requirement is 0, accept without BFS
             if (minReachablePercentClamped <= 0f) return true;
 
@@ -460,7 +647,7 @@ namespace AI_Workshop03
             if (minReachableCells <= 1) return true;
 
             // do only partial BFS build to check if reachable cells meet the minReachableCells requirement, avoid full BFS build for performance if requirement is not met
-            return mapReach.HasAtLeastReachable(data, startIndex, allowDiagonals, minReachableCells);
+            return mapReach.HasAtLeastReachable(data, startIndex, allowDiagonals, minReachableCells, out reached);
         }
 
 
@@ -545,7 +732,7 @@ namespace AI_Workshop03
         {
             _scratch.cells.Clear();
 
-            switch (terrain.Mode)                                                              // what "paint brush" is used to generate this tiles structure
+            switch (terrain.Mode)       // what "paint brush" is used to generate this tiles structure
             {
                 case PlacementMode.Static:
                     ExpandRandomStatic(terrain, _scratch.cells);
@@ -559,6 +746,16 @@ namespace AI_Workshop03
                     GenerateLichtenberg(terrain, terrainLayerId, _scratch.cells);
                     break;
             }
+
+
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            if (_scratch.cells.Count == 0)
+            {
+                // Telemetry-only: terrain produced nothing this attempt.
+                // Later refine this to "couldn't find seed after X tries".
+                // RecordStarved(terrain, terrainLayerId);
+            }
+#endif
 
             if (_scratch.cells.Count == 0) return;
 
@@ -585,25 +782,7 @@ namespace AI_Workshop03
 #endif
                 if (!CanUseCell(terrain, index)) continue;
 
-                if (terrain.AllowOverwriteObstacle && _blocked[index])
-                    SetBlocked(index, false);
-
-                // NOTE:
-                //      TerrainID is the category enum (Land/Subterranean/Liquid/Air), not the unique terrain-rule identity.
-                //      This saets a groupng of terrain types, not the specific terrain type, so different terrain types that share the same TerrainID will be
-                //      grouped together for gameplay purposes (e.g. all Land terrains will share the same TerrainID even if they have different costs/colors/rules).
-                //
-                //      The terrainLayerId is computed and used only for _lastPaintLayerId, local for this generation of the map.
-                //      Identifying which terrain type is responsible for painting this cell, so it can be used for generation rules that
-                //      depend on "what was painted on this cell" (e.g. only paint this terrain on cells painted by that terrain,
-                //      or avoid painting on cells painted by that terrain).
-                //
-                //      _terrainTypeIds stores category, _lastPaintLayerId stores rule id
-                //      
-                _terrainTypeIds[index] = (byte)terrain.TerrainID;
-                _terrainCost[index] = terrain.Cost;
-                _baseColors[index] = terrain.Color;
-                _lastPaintLayerId[index] = terrainLayerId;
+                PaintTerrainCell(index, terrain, terrainLayerId);
             }
         }
 
@@ -612,45 +791,87 @@ namespace AI_Workshop03
             for (int i = 0; i < cells.Count; i++)
             {
                 if (_blockedCount >= _maxBlockedBudget)
-                    break; // reached max blocked budget, early out stop
+                    break;                          // reached max blocked budget, early out stop
 
                 int index = cells[i];
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
-                if (!IsValidCell(index)) continue;    // This should be safe to remove? All callers indices produced internally should already be valid, because they are generated from valid coords and neighbors.
+                if (!IsValidCell(index)) continue;  // This should be safe to remove? All callers indices produced internally should already be valid, because they are generated from valid coords and neighbors.
 #endif
                 if (!CanUseCell(terrain, index)) continue;
+                if (!terrain.AllowOverwriteObstacle && _blocked[index]) continue;   // already blocked, no need to re-apply same values  <-- NOT FULLY TRUE ANYMORE: this defeats AllowOverwriteObstacle for obstacles
 
-                if (_blocked[index])
-                    continue; // already blocked, no need to re-apply same values 
-
-                SetBlocked(index, true);
-
-                // NOTE:
-                //      TerrainID is the category enum (Land/Subterranean/Liquid/Air), not the unique terrain-rule identity.
-                //      This saets a groupng of terrain types, not the specific terrain type, so different terrain types that share the same TerrainID will be
-                //      grouped together for gameplay purposes (e.g. all Land terrains will share the same TerrainID even if they have different costs/colors/rules).
-                //
-                //      The terrainLayerId is computed and used only for _lastPaintLayerId, local for this generation of the map.
-                //      Identifying which terrain type is responsible for painting this cell, so it can be used for generation rules that
-                //      depend on "what was painted on this cell" (e.g. only paint this terrain on cells painted by that terrain,
-                //      or avoid painting on cells painted by that terrain). 
-                _terrainTypeIds[index] = (byte)terrain.TerrainID;
-                _terrainCost[index] = 0;
-                _lastPaintLayerId[index] = terrainLayerId;
-                _baseColors[index] = terrain.Color;
+                PaintObstacleCell(index, terrain, terrainLayerId);
             }
         }
 
         private void SetBlocked(int index, bool blocked)
         {
+            Touch(index);
+            SetBlocked_NoTouch(index, blocked);
+        }
+
+        private void SetBlocked_NoTouch(int index, bool blocked)
+        {
             bool wasBlocked = _blocked[index];
             if (wasBlocked == blocked) return;
 
             _blocked[index] = blocked;
+            _blockedCount += blocked ? 1 : -1;
 
-            if (blocked) _blockedCount++;
-            else _blockedCount = Math.Max(0, _blockedCount - 1);
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            if (_blockedCount < 0) Debug.LogError("_blockedCount went negative. Missing base/reset invariant?");
+#endif
+            if (_blockedCount < 0) _blockedCount = 0; // safety clamp;
         }
+
+        private void PaintTerrainCell(int index, TerrainTypeData terrain, byte terrainLayerId)
+        {
+            Touch(index);
+
+            if (terrain.AllowOverwriteObstacle && _blocked[index])
+                SetBlocked_NoTouch(index, false);
+
+            // NOTE:
+            //      TerrainID is the category enum (Land/Subterranean/Liquid/Air), not the unique terrain-rule identity.
+            //      This saets a groupng of terrain types, not the specific terrain type, so different terrain types that share the same TerrainID will be
+            //      grouped together for gameplay purposes (e.g. all Land terrains will share the same TerrainID even if they have different costs/colors/rules).
+            //
+            //      The terrainLayerId is computed and used only for _lastPaintLayerId, local for this generation of the map.
+            //      Identifying which terrain type is responsible for painting this cell, so it can be used for generation rules that
+            //      depend on "what was painted on this cell" (e.g. only paint this terrain on cells painted by that terrain,
+            //      or avoid painting on cells painted by that terrain). 
+            _terrainTypeIds[index] = (byte)terrain.TerrainID;
+            _terrainCost[index] = terrain.Cost;
+            _baseColors[index] = terrain.Color;
+            _lastPaintLayerId[index] = terrainLayerId;
+        }
+
+        private void PaintObstacleCell(int index, TerrainTypeData terrain, byte terrainLayerId)
+        {
+            Touch(index);
+
+            // Avoid double-touch: do NOT call SetBlocked() here since it also calls Touch(), and we already called Touch() at the start of this method 
+            if (!_blocked[index])
+                SetBlocked_NoTouch(index, true);
+
+            // NOTE:
+            //      TerrainID is the category enum (Land/Subterranean/Liquid/Air), not the unique terrain-rule identity.
+            //      This saets a groupng of terrain types, not the specific terrain type, so different terrain types that share the same TerrainID will be
+            //      grouped together for gameplay purposes (e.g. all Land terrains will share the same TerrainID even if they have different costs/colors/rules).
+            //
+            //      The terrainLayerId is computed and used only for _lastPaintLayerId, local for this generation of the map.
+            //      Identifying which terrain type is responsible for painting this cell, so it can be used for generation rules that
+            //      depend on "what was painted on this cell" (e.g. only paint this terrain on cells painted by that terrain,
+            //      or avoid painting on cells painted by that terrain).
+            //
+            //      _terrainTypeIds stores category, _lastPaintLayerId stores rule id
+            // 
+            _terrainTypeIds[index] = (byte)terrain.TerrainID;
+            _terrainCost[index] = 0;
+            _baseColors[index] = terrain.Color;
+            _lastPaintLayerId[index] = terrainLayerId;
+        }
+
 
 
         #endregion
@@ -673,7 +894,9 @@ namespace AI_Workshop03
                 _lastPaintLayerId[i] = 0;
             }
 
-            _blockedCount = 0;
+            _blockedCount = 0;  // WARNING: correct ONLY if attempt always starts from base + all block writes go through went through Touch-path: SetBlocked/Touch
+                                //          Safety provided by AssertBaseIsUnblocked(), so fine for now, but need to be careful if changing the logic of how
+                                //          attempts are reset or how blocked writes are done, this could become a source of bugs if not properly maintained.
         }
 
         private void ResetWalkableToBaseOnly()
@@ -695,6 +918,37 @@ namespace AI_Workshop03
             for (int i = 0; i < _cellCount; i++)
                 if (!_blocked[i]) count++;
             return count;
+        }
+
+        private void BeginAttempt()
+        {
+            _scratch.touched.Clear();
+            _scratch.touchedStampId = NextTouchedId();      // guarantees non-zero
+        }
+
+        private void Touch(int idx)
+        {
+            if (_scratch.touchedStamp[idx] == _scratch.touchedStampId) return;
+            _scratch.touchedStamp[idx] = _scratch.touchedStampId;
+            _scratch.touched.Add(idx);
+        }
+
+        private void UndoTouchedToBase()
+        {
+            var touched = _scratch.touched;
+            for (int i = 0; i < touched.Count; i++)
+            {
+                int idx = touched[i];
+                _blocked[idx] = false;
+                _terrainTypeIds[idx] = _baseTerrainType;
+                _terrainCost[idx] = _baseWalkableCost;
+                _baseColors[idx] = _baseWalkableColor;
+                _lastPaintLayerId[idx] = 0;
+            }
+            touched.Clear();
+            _blockedCount = 0;  // WARNING: correct ONLY if attempt always starts from base + all block writes go through went through Touch-path: SetBlocked/Touch
+                                //          Safety provided by AssertBaseIsUnblocked(), so fine for now, but need to be careful if changing the logic of how
+                                //          attempts are reset or how blocked writes are done, this could become a source of bugs if not properly maintained.
         }
 
 
@@ -730,7 +984,7 @@ namespace AI_Workshop03
             return Mathf.Max(2, Mathf.RoundToInt(Mathf.Min(_width, _height) * 0.05f));
         }
 
-        private int ComputeInteriorMarginCells(in TerrainTypeData.AreaFocusWeights weights)
+        private int ComputeFocusThicknessCells(in TerrainTypeData.AreaFocusWeights weights)
         {
             float percent = Mathf.Clamp(weights.InteriorMarginPercent, 0f, 0.49f);
             int minDim = Mathf.Min(_width, _height);
@@ -744,14 +998,9 @@ namespace AI_Workshop03
             return Mathf.Clamp(margin, 0, maxMargin);
         }
 
-        private int ComputeEdgeBandCells(in TerrainTypeData.AreaFocusWeights weights)
-        {
-            int minDim = Mathf.Min(_width, _height);
-            int maxBand = Mathf.Max(0, (minDim - 1) / 2);
-
-            int band = ComputeInteriorMarginCells(in weights);
-            return Mathf.Clamp(band, 0, maxBand);
-        }
+        // These two became the same internal code, but has different caller reasons so keeping as wrappers until I can fix making them different again if needed.
+        private int ComputeInteriorMarginCells(in TerrainTypeData.AreaFocusWeights w) => ComputeFocusThicknessCells(in w);
+        private int ComputeEdgeBandCells(in TerrainTypeData.AreaFocusWeights w) => ComputeFocusThicknessCells(in w);
 
 
         private int HeuristicManhattan(int a, int b)
@@ -787,6 +1036,9 @@ namespace AI_Workshop03
 
             if (_scratch.heatStamp == null || _scratch.heatStamp.Length != _cellCount)
                 _scratch.heatStamp = new int[_cellCount];
+
+            if (_scratch.touchedStamp == null || _scratch.touchedStamp.Length != _cellCount)
+                _scratch.touchedStamp = new int[_cellCount];
         }
 
         private int NextMarkId()
@@ -822,6 +1074,21 @@ namespace AI_Workshop03
             return next;
         }
 
+        private int NextTouchedId()
+        {
+            int next = _scratch.touchedStampId + 1;
+            if (next <= 0 || next == int.MaxValue)
+            {
+                Array.Clear(_scratch.touchedStamp, 0, _scratch.touchedStamp.Length);
+                _scratch.touchedStampId = 1;
+                return 1;
+            }
+
+            _scratch.touchedStampId = next;
+            return next;
+        }
+
+
 
         [System.Diagnostics.Conditional("UNITY_EDITOR")]
         [System.Diagnostics.Conditional("DEVELOPMENT_BUILD")]
@@ -836,11 +1103,34 @@ namespace AI_Workshop03
 
 
 
-
         private static void EnsureListCapacity(List<int> list, int needed)
         {
             if (needed > list.Capacity) list.Capacity = needed;
         }
+
+
+
+        #region Debug telemetry
+
+        [System.Diagnostics.Conditional("UNITY_EDITOR")]
+        [System.Diagnostics.Conditional("DEVELOPMENT_BUILD")]
+        private void AssertAttemptStartsFromUnblockedBase()
+        {
+            // If you ever decide base can be blocked later, this is where you’ll notice.
+            for (int i = 0; i < _cellCount; i++)
+                if (_blocked[i]) { Debug.LogError("MapGenerator assumes base map is fully unblocked."); break; }
+        }
+
+
+        [System.Diagnostics.Conditional("UNITY_EDITOR")]
+        [System.Diagnostics.Conditional("DEVELOPMENT_BUILD")]
+        private void RecordAttempt(in AttemptStats s)
+        {
+            _telemetry[_telemetryWrite++ & (TelemetryRing - 1)] = s;
+        }
+
+
+        #endregion
 
 
 

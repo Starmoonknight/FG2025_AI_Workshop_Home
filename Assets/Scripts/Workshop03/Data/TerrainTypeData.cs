@@ -13,7 +13,7 @@ namespace AI_Workshop03
         Any,                // full random placement
         SameEdge,           // both endpoints on the same edge
         AdjacentEdge,       // endpoint edge must be adjacent (no opposite, no same)
-        OppositeEdgePair,   // pick endpoints on oposit edges
+        OppositeEdgePair,   // pick endpoints on opposit edges
         NotOpposite         // good "along edges" default, never picks the opposite edge
     }
 
@@ -21,7 +21,7 @@ namespace AI_Workshop03
     public enum TerrainID
     {
         Land            = 0,    // (0 = base) Normal ground without any modifiers 
-        Subterarrian    = 1,
+        Subterranean    = 1,
         Liquid          = 2,
         Air             = 3,
     }

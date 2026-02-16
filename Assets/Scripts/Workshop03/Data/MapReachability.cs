@@ -1,4 +1,7 @@
 using System;
+using UnityEditor.PackageManager;
+using static AI_Workshop02_Testing.Test_GameBoard;
+using static UnityEngine.UIElements.UxmlAttributeDescription;
 
 
 namespace AI_Workshop03
@@ -34,6 +37,9 @@ namespace AI_Workshop03
                 _reachStamp = new int[cellCount];
         }
 
+        // NOTE TODO: Explicitly invalidate the stamp unless the generator build it
+        //            E.g. here in MapReachability add Invalidate() that sets _reachStampId = 0,
+        //            call it after any kind of partial checks and only set stamp via final build. Prevents accidental use of a partial stamp.
 
 
         // NOTE: Not an Atomic method, should only be exposed in a method that calles an Atomic method before this one?
@@ -44,21 +50,22 @@ namespace AI_Workshop03
         /// Returns true if reachable cells from start are at least minReachableCells.
         /// NOTE: This may leave a PARTIAL stamp if it early-outs.
         /// </summary>
-        public bool HasAtLeastReachable(MapData data, int startIndex, bool allowDiagonals, int minReachableCells)
+        public bool HasAtLeastReachable(MapData data, int startIndex, bool allowDiagonals, int stopAt, out int reached)
         {
+            reached = -1;
             if (data == null) throw new ArgumentNullException(nameof(data));
 
-            if (minReachableCells <= 0) return true; // requirement disabled
+            if (stopAt <= 0) return true; // requirement disabled
             int cellCount = data.CellCount;
             if ((uint)startIndex >= (uint)cellCount) return false;
             if (data.IsBlocked[startIndex]) return false;
 
             // clamp requirement to possible range
-            if (minReachableCells > cellCount) minReachableCells = cellCount;
-            if (minReachableCells <= 1) return true; // start cell counts as 1 (since already checked it's walkable, but if that changes in the future this can be a breaking point! Plan: make a separate version for obstacles reachability in future) 
+            if (stopAt > cellCount) stopAt = cellCount;
+            if (stopAt <= 1) return true; // start cell counts as 1 (since already checked it's walkable, but if that changes in the future this can be a breaking point! Plan: make a separate version for obstacles reachability in future) 
 
-            int reached = BuildReachableFromInternal_StopAt(data, startIndex, allowDiagonals, stopAtCount: minReachableCells);
-            return reached >= minReachableCells;
+            reached = BuildReachableFromInternal_StopAt(data, startIndex, allowDiagonals, stopAtCount: stopAt);
+            return reached >= stopAt;
         }
 
         public int BuildReachableFromInternal_StopAt(MapData data, int startIndex, bool allowDiagonals, int stopAtCount)

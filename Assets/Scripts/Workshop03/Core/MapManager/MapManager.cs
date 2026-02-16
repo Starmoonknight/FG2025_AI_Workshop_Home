@@ -160,14 +160,19 @@ namespace AI_Workshop03
 
             // Generate seeds
             int baseSeed = (_seed != 0) ? _seed : Environment.TickCount;    // if seed is 0 use random seed
-            int genSeed = baseSeed;                                         // main generation randomness seed
-            int orderSeed = baseSeed ^ unchecked((int)0x73856093);          // terrain paint ordering randomness (rarity shuffle), salted seed
+            int genSeed = baseSeed;                                         // main generation randomness, placement base seed
+            int orderSeed = baseSeed ^ unchecked((int)0x73856093);          // terrain paint ordering randomness (rarity shuffle), salted ordering base seed
 
             // Store last used seed for reference
             _lastGeneratedSeed = baseSeed;
             LogGenerationSeed(baseSeed, genSeed, orderSeed);
             UpdateSeedHud();
 
+            // Resize MapData to match current width/height for a fresh generation, and configure base terrain (walkable land, cost 10   /or whatever _baseTerrainCost is) in the data arrays
+            m_data.Resize(_width, _height);
+            m_data.ConfigureBase((byte)TerrainID.Land, _baseTerrainCost, _walkableColor);
+
+            /*
             // Reset truth arrays to base state for a fresh generation   (walkable land, cost 10    /or whatever _baseTerrainCost is)
             m_data.InitializeToBase(
                 width: _width,
@@ -176,14 +181,13 @@ namespace AI_Workshop03
                 baseTerrainCost: _baseTerrainCost,
                 baseTerrainColor: _walkableColor
             );
-
+            */
 
 
             // TODO (architecture): Generator debug flags are currently driven by MapManager for convenience.
             // If MapGenerator needs to become reusable outside Unity/editor tooling later (non-Unity, tests, tools)
             // Move these debug toggles into a dedicated config/settings object (e.g. MapGenDebugSettings), passing a
             // small debug settings object/config into Generate() instead.
-
 
             // Setup the Debug
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
@@ -252,10 +256,11 @@ namespace AI_Workshop03
         private void HandleMapRebuiltInternal()
         {
 
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
             Debug.Log($"MinWorld={m_data.MinWorld} MaxWorld={m_data.MaxWorld} CellSize={m_data.CellTileSize} W={m_data.Width} H={m_data.Height}");
             Debug.Log($"Expected size (cells*cellSize): X={m_data.Width * m_data.CellTileSize} Z={m_data.Height * m_data.CellTileSize}");
             Debug.Log($"Reported size: X={m_data.MaxWorld.x - m_data.MinWorld.x} Z={m_data.MaxWorld.z - m_data.MinWorld.z}");
-
+#endif
 
             FitCameraOrthoTopDown();
 

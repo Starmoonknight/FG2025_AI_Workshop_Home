@@ -91,7 +91,7 @@ namespace AI_Workshop03
         public Vector3 MinWorld { get; private set; }           // Bounds / World-space rectangle that the grid occupies
         public Vector3 MaxWorld { get; private set; }           // Bounds / World-space rectangle that the grid occupies
         public Vector3 GridCenter { get; private set; }         // Center of the map
-        public bool AllowDiagonalTraversal { get; private set; }    // For A* pathfinding accessability, also affects what is considered an acceptaple map at the generation stage
+        public bool AllowDiagonalTraversal { get; private set; }    // For A* pathfinding accessability, also affects what is considered an acceptable map at the generation stage
 
 
         // Base defaults (NOT per-cell). These are used to reset the map and define "empty baseline state".
@@ -118,21 +118,32 @@ namespace AI_Workshop03
 
 
         /// <summary>
-        /// Ensures arrays match the given size. Re-allocates only if size changed.
-        /// Keeps the SAME MapData object identity (prevents stale MapData refs).
+        /// Ensures internal arrays exist and match the requested grid size. 
+        /// Reallocates arrays only when size changed or arrays are null.
+        /// Keeps the SAME MapData object identity instance (prevents stale MapData refs, external references remain valid).
+        /// 
+        /// NOTE: Early-out only checks IsBlocked != null; it assumes other arrays are valid if width/height match.
         /// </summary>
         public void Resize(int width, int height)
         {
             if (width <= 0) throw new ArgumentOutOfRangeException(nameof(width));
             if (height <= 0) throw new ArgumentOutOfRangeException(nameof(height));
 
-            if (width == Width && height == Height && IsBlocked != null)
+            // check that main arrays existand match the new size, if so, keep them and just return (early-out) 
+            if (width == Width && height == Height
+                && IsBlocked != null && TerrainTypeIds != null && TerrainCosts != null
+                && BaseCellColors != null && LastPaintLayerIds != null
+                && IsBlocked.Length == Width * Height /* etc. Add any new others here later, if relevant */)
                 return;
 
             Width = Mathf.Max(1, width);
             Height = Mathf.Max(1, height);
 
-            int n = width * height;
+            long count = (long)Width * Height;
+            if (count > int.MaxValue)
+                throw new OverflowException("Grid too large for int indexing.");
+
+            int n = (int)count;
 
             // Allocate only when needed:
             if (IsBlocked == null || IsBlocked.Length != n)
@@ -155,8 +166,23 @@ namespace AI_Workshop03
         }
 
         /// <summary>
-        /// Clears/resets all truth arrays to a default base state WITHOUT reallocating.
+        /// Resize early-out check that ensures the internal storage is allocated to match the current width and height of the data structure.
         /// </summary>
+        /// <remarks>Call this method before performing operations that require the allocated storage to
+        /// be consistent with the current dimensions if anticipating there is a risk of call-order mistakes.</remarks>
+        public void EnsureAllocatedForCurrentSize()
+        {
+            Resize(Width, Height);
+        }
+
+        /// <summary>
+        /// Resizes the grid if needed, sets base terrain defaults (type/cost/color),
+        /// then fully resets all per-cell arrays to that base state (blocked=false, lastPaint=0).
+        /// Does NOT allocate unless Resize determines size/arrays require it.
+        /// </summary>
+        /// <param name="baseTerrainKind">The kind of terrain to set as the base. Represents a terrain type identifier as a byte value.</param>
+        /// <param name="baseTerrainCost">The cost associated with the base terrain. Specifies the movement or traversal cost as an integer.</param>
+        /// <param name="baseTerrainColor">The color to apply to the base terrain. Provided as a Color32 structure.</param>
         public void InitializeToBase(int width, int height, byte baseTerrainKind, int baseTerrainCost, Color32 baseTerrainColor)
         {
             Resize(width, height);
@@ -167,6 +193,27 @@ namespace AI_Workshop03
             ResetCellsToBase();
         }
 
+        /// <summary>
+        /// Sets the base terrain defaults (type/cost/color) without resizing
+        /// and without modifying any per-cell arrays.
+        /// </summary>
+        /// <param name="baseTerrainKind">The kind of terrain to set as the base. Represents a terrain type identifier as a byte value.</param>
+        /// <param name="baseTerrainCost">The cost associated with the base terrain. Specifies the movement or traversal cost as an integer.</param>
+        /// <param name="baseTerrainColor">The color to apply to the base terrain. Provided as a Color32 structure.</param>
+        public void ConfigureBase(byte baseTerrainKind, int baseTerrainCost, Color32 baseTerrainColor)
+        {
+            SetBaseTerrainCost(baseTerrainCost);
+            SetBaseTerrainKind(baseTerrainKind);
+            SetBaseTerrainColor(baseTerrainColor);
+        }
+
+        /// <summary>
+        /// Fully resets all per-cell arrays to the current base defaults:
+        /// blocked=false, terrainType=BaseTerrainType, cost=BaseTerrainCost, color=BaseTerrainColor, lastPaint=0.
+        /// Assumes arrays are allocated and sized to CellCount.
+        /// 
+        /// NOTE: This method assumes arrays are non-null and correctly sized, this method itself doesn’t enforce it.
+        /// </summary>
         public void ResetCellsToBase()
         {
             int n = CellCount;
@@ -181,6 +228,13 @@ namespace AI_Workshop03
         }
 
 
+        /// <summary>
+        /// Stores map metadata (build id, seed, traversal settings, origin, cell size) and
+        /// recomputes derived world-space bounds (MinWorld/MaxWorld) and GridCenter
+        /// based on current Width/Height and CellTileSize.
+        /// 
+        /// NOTE: Uses current Width and Height to compute bounds, does not modify them. Assumes they are already set correctly before calling this method.
+        /// </summary>
         public void SetMapMeta(int buildId, int mapGenSeed, Vector3 gridOriginWorld, float cellTileSize, bool allowDiagonals)
         {
             AllowDiagonalTraversal = allowDiagonals;
@@ -243,15 +297,15 @@ namespace AI_Workshop03
         }
 
         // NEW
-        public bool TryWorldToCoordXZ(Vector3 worldPos, out int x, out int y)
+        public bool TryWorldToCoordXZ(Vector3 worldPos, out int x, out int z)
         {
             float localX = (worldPos.x - GridOriginWorld.x) / CellTileSize;
             float localZ = (worldPos.z - GridOriginWorld.z) / CellTileSize;
 
             x = Mathf.FloorToInt(localX);
-            y = Mathf.FloorToInt(localZ);
+            z = Mathf.FloorToInt(localZ);
 
-            return IsValidCellCoord(x, y);
+            return IsValidCellCoord(x, z);
         }
 
         // NEW

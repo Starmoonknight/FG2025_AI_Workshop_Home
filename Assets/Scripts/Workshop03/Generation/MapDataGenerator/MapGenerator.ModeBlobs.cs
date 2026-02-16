@@ -15,11 +15,12 @@ namespace AI_Workshop03
         {
             outCells.Clear();
 
-            int desiredCells = Mathf.RoundToInt(terrain.CoveragePercent * _cellCount);
+            float coverage01 = Mathf.Clamp01(terrain.CoveragePercent);
+            int desiredCells = Mathf.RoundToInt(coverage01 * _cellCount);
             if (desiredCells <= 0) return;
 
             EnsureListCapacity(outCells, desiredCells);
-            EnsureGenBuffers();
+            AssertBuffersReady();        //EnsureGenBuffers();
 
             // a shared memory stamp for this terrain to keep from overlapping blobs
             int unionId = NextMarkId();
@@ -90,7 +91,7 @@ namespace AI_Workshop03
             maxCells = Mathf.Clamp(maxCells, 1, _cellCount);
             EnsureListCapacity(outCells, maxCells);
 
-            EnsureGenBuffers();
+            AssertBuffersReady();        //EnsureGenBuffers();
 
             if (_scratch.used[seedIndex] == unionId)
                 return; // already part of this terrain's union

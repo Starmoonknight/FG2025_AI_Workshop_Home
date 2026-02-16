@@ -14,14 +14,14 @@ namespace AI_Workshop03
         {
 
             outCells.Clear();
-            EnsureGenBuffers();
+            AssertBuffersReady();        //EnsureGenBuffers();
 
             int heatId = NextHeatId();
 
             int usedId = NextMarkId();
 
-            float coverage = Mathf.Clamp01(terrain.CoveragePercent);
-            int desiredCells = Mathf.RoundToInt(coverage * _cellCount);
+            float coverage01 = Mathf.Clamp01(terrain.CoveragePercent);
+            int desiredCells = Mathf.RoundToInt(coverage01 * _cellCount);
             if (desiredCells <= 0) return;
 
             int perPath = Mathf.Max(1, terrain.Lichtenberg.CellsPerPath);
@@ -82,7 +82,7 @@ namespace AI_Workshop03
             if (!CanUseCell(terrain, startIndex)) return;
             if (!CanUseCell(terrain, targetIndex)) return;
 
-            EnsureGenBuffers();
+            AssertBuffersReady();        //EnsureGenBuffers();
             int stampId = NextMarkId();
 
 
@@ -253,7 +253,7 @@ namespace AI_Workshop03
 
         private void WidenOnce(TerrainTypeData terrain, List<int> cells)
         {
-            EnsureGenBuffers();
+            AssertBuffersReady();        //EnsureGenBuffers();
             int stampId = NextMarkId();
 
             // Mark existing
@@ -294,6 +294,7 @@ namespace AI_Workshop03
             _scratch.heat[idx] += add;
 
             if (radius <= 0) return;
+            if (add <= 0) return;
 
             IndexToXY(idx, out int x, out int y);
 
@@ -313,8 +314,19 @@ namespace AI_Workshop03
                     int dx = Math.Abs(nx - x);
                     if (dx == 0 && dy == 0) continue;
 
+                    /*          // This was a Chebyshev-ish bounding box, but Manhattan falloff.
                     int manhattan = dx + dy;
                     int v = Math.Max(0, add - falloff * manhattan);
+                    */
+                    // This should actually be a true circular radius with Chebyshev distance,
+                    // to match the Lichtenberg heuristic?,
+                    // but the original implementation was Manhattan, so keeping that for now until I can test the difference.
+                    
+                                // This is an actuall Manhatan radius 
+                    int manhattan = dx + dy;
+                    if (manhattan > radius) continue;   // Tight Manhattan radius (diamond)
+                    int v = Math.Max(0, add - falloff * manhattan);
+
                     if (v == 0) continue;
 
                     int n = rowBase + nx;
