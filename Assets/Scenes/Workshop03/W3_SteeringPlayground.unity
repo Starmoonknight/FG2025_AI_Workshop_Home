@@ -651,13 +651,19 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: f0080ecdadce9704481d74b413554c26, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AI_Workshop03.SwarmSpawner
-  _navigationService: {fileID: 1223029781}
-  _mapManager: {fileID: 925457158}
-  _agentPrefab: {fileID: 4519865471394796635, guid: 72f0b86cb6d236045b06f1c19754f728, type: 3}
-  _followerCount: 10
-  _spawnAreaSize: {x: 10, y: 10}
-  _agentPlaneOffsetY: 0.5
-  _target: {fileID: 2115425479}
+  m_navigationService: {fileID: 1223029781}
+  m_mapManager: {fileID: 925457158}
+  m_agentPrefab: {fileID: 4519865471394796635, guid: 72f0b86cb6d236045b06f1c19754f728, type: 3}
+  m_leaderColor:
+    serializedVersion: 2
+    rgba: 4278190335
+  m_followerColor:
+    serializedVersion: 2
+    rgba: 4278228735
+  m_followerCount: 10
+  m_spawnAreaSize: {x: 10, y: 10}
+  m_agentPlaneOffsetY: 0.5
+  m_target: {fileID: 2115425479}
 --- !u!1 &1352866326
 GameObject:
   m_ObjectHideFlags: 0
@@ -886,34 +892,34 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: cb12b444d968a184aae506679092312c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AI_Workshop03.MapInputController
-  _cam: {fileID: 1352866328}
-  _mapManager: {fileID: 925457158}
-  _player: {fileID: 2115425475}
-  _goalMarker: {fileID: 296552046}
-  _click:
+  m_cam: {fileID: 1352866328}
+  m_mapManager: {fileID: 925457158}
+  m_player: {fileID: 2115425475}
+  m_goalMarker: {fileID: 0}
+  m_click:
     m_Name: Click
     m_Type: 0
     m_ExpectedControlType: 
-    m_Id: d836ab78-10ba-4b73-8db9-3430b1093e76
+    m_Id: cbd55f26-336f-4123-8c38-9aaa20ac49a0
     m_Processors: 
     m_Interactions: 
     m_SingletonActionBindings: []
     m_Flags: 0
   _agent: {fileID: 2647801867824992716}
-  _followMode: 0
-  _followSmooth: 8
-  _keepOffsetOnSwitch: 1
-  _fixedOffset: {x: 0, y: 8, z: -8}
-  _cellsPerScrollNotch: 5
-  _scrollSensitivity: 2
-  _edgePaddingCells: 0.5
-  _cellSizeWorld: 1
-  _followViewCells: 15
-  _overviewPadding: 1.5
-  _overviewHeight: 20
-  _zoomSmooth: 10
-  _minViewCells: 6
-  _maxViewCells: 40
+  m_followMode: 0
+  m_followSmooth: 8
+  m_keepOffsetOnSwitch: 1
+  m_fixedOffset: {x: 0, y: 8, z: -8}
+  m_cellsPerScrollNotch: 3
+  m_scrollSensitivity: 2
+  m_edgePaddingCells: 0.5
+  m_cellSizeWorld: 1
+  m_followViewCells: 15
+  m_overviewPadding: 1.5
+  m_overviewHeight: 20
+  m_zoomSmooth: 10
+  m_minViewCells: 6
+  m_maxViewCells: 40
 --- !u!4 &1786645180
 Transform:
   m_ObjectHideFlags: 0

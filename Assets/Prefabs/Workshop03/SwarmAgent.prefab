@@ -14,8 +14,8 @@ GameObject:
   - component: {fileID: 1238538270662584919}
   - component: {fileID: 6005593210462088849}
   - component: {fileID: 5031422391020874124}
-  - component: {fileID: 8271197311262272608}
   - component: {fileID: 4519865471394796635}
+  - component: {fileID: 8271197311262272608}
   - component: {fileID: 2858196979129833558}
   - component: {fileID: 5040006321807410614}
   - component: {fileID: 3794004741766748977}
@@ -74,7 +74,7 @@ MeshRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 2100000, guid: 31321ba15b8f8eb4c954353edc038b1d, type: 2}
+  - {fileID: 2100000, guid: e613050563c64234a8a25ac6ac5428f8, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -150,6 +150,40 @@ MonoBehaviour:
   _visualizeAll: 1
   _showFinalPath: 1
   _showStartAndGoal: 1
+--- !u!114 &4519865471394796635
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1668245068365282562}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 09be9f4bd9630e640af2949bb5ecd698, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::AI_Workshop03.AI.SwarmingAgent
+  m_agentPlaneOffsetY: 0.5
+  m_isLeader: 0
+  m_leader: {fileID: 0}
+  m_target: {fileID: 0}
+  m_maxSpeed: 3
+  m_maxAccel: 20
+  m_lookAhead: 0.9
+  m_sideOffset: 0.5
+  m_avoidWeight: 2
+  m_waypointRadius: 0.5
+  m_slowingRadius: 1.1
+  m_strictFollow01: 0.4
+  m_leaderLookAheadCells: 0.6
+  m_leaderLookAheadSpeed: 0.15
+  m_lateralDamp: 6
+  m_neighborRadius: 2.5
+  m_separationRadius: 1.1
+  m_leaderFollowDist: 1.5
+  m_separationWeight: 1.4
+  m_cohesionWeight: 0.6
+  m_alignmentWeight: 0.5
+  m_followLeaderWeight: 1
 --- !u!114 &8271197311262272608
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -173,35 +207,6 @@ MonoBehaviour:
   _patrolMinManhattanClampMin: 2
   _patrolMinManhattanClampMax: 200
   _logStateChanges: 1
---- !u!114 &4519865471394796635
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1668245068365282562}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 09be9f4bd9630e640af2949bb5ecd698, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::AI_Workshop03.AI.SwarmingAgent
-  _agentPlaneOffsetY: 0.5
-  _isLeader: 0
-  _leader: {fileID: 0}
-  _target: {fileID: 0}
-  _maxSpeed: 6
-  _maxAccel: 20
-  _waypointRadius: 0.3
-  _slowingRadius: 2
-  _neighborRadius: 2.5
-  _separationRadius: 1.1
-  _separationWeight: 1.4
-  _cohesionWeight: 0.6
-  _alignmentWeight: 0.5
-  _followLeaderWeight: 1
-  _lookAhead: 0.9
-  _sideOffset: 0.5
-  _avoidWeight: 2
 --- !u!114 &2858196979129833558
 MonoBehaviour:
   m_ObjectHideFlags: 0

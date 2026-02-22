@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using TMPro;
 using UnityEngine;
 
 
@@ -20,7 +19,7 @@ namespace AI_Workshop03.AI
     // - Global navigation (A* path) for leaders: PathBuffer = list of grid cell waypoints.
     // - Local steering (boids) for followers: Separation + Cohesion + Alignment + FollowLeader.
     // - Local obstacle respect (followers): look-ahead probes that steer away from blocked/out-of-bounds cells.
-    // Motion is velocity-based: steering -> acceleration -> velocity -> position (clamped by _maxAccel/_maxSpeed).
+    // Motion is velocity-based: steering -> acceleration -> velocity -> position (clamped by m_maxAccel/_maxSpeed).
     [RequireComponent(typeof(AgentMapSense))]
     [RequireComponent(typeof(AgentPathBuffer))]
     [RequireComponent(typeof(AgentPathRequester))]
@@ -29,7 +28,7 @@ namespace AI_Workshop03.AI
     {
 
         // Lock to XZ plane: prevents drift and ensures grid world->index logic stays consistent.
-        [SerializeField] private float _agentPlaneOffsetY = 0.5f;   // Y if XZ, Z if XY
+        [SerializeField] private float m_agentPlaneOffsetY = 0.5f;   // Y if XZ, Z if XY
 
 
         // --- Static registry (simple + low-bug risk for now. Plan to switch to other event based system later to allow followers to switch between leaders)
@@ -38,77 +37,88 @@ namespace AI_Workshop03.AI
 
         
         [Header("Role")]
-        [SerializeField] private bool _isLeader;             // If true: move using A* path buffer. If false: move using swarm steering.
-        [SerializeField] private SwarmingAgent _leader;      // swarm leader 
-        [SerializeField] private Transform _target;          // player
+        [SerializeField] private bool m_isLeader;             // If true: move using A* path buffer. If false: move using swarm steering.
+        [SerializeField] private SwarmingAgent m_leader;      // swarm leader 
+        [SerializeField] private Transform m_target;          // player
 
         [Header("Movement")]
-        [SerializeField] private float _maxSpeed = 4f;      // max speed this unit can reach 
-        [SerializeField] private float _maxAccel = 20f;     // max change in velocity per second (turning + speeding up + braking)
+        [SerializeField] private float m_maxSpeed = 4f;      // max speed this unit can reach 
+        [SerializeField] private float m_maxAccel = 20f;     // max change in velocity per second (turning + speeding up + braking)
+
+        [Header("Obstacle Avoidance")]
+        [SerializeField] private float m_lookAhead = 0.9f;
+        [SerializeField] private float m_sideOffset = 0.5f;
+        [SerializeField] private float m_avoidWeight = 2.0f;
 
         [Header("Arrival")]
-        [SerializeField] private float _waypointRadius = 0.25f;         // how close to a waypoint unit needs to determine that it has reached it
-        [SerializeField, Min(0)] private float _slowingRadius = 3f;     // (reserved) used by Arrive steering when implemented
+        [SerializeField] private float m_waypointRadius = 0.3f;         // how close to a waypoint unit needs to determine that it has reached it   (0.4–0.6 * CellTileSize should work)
+        [SerializeField, Min(0)] private float m_slowingRadius = 1.2f;  // (reserved) used by Arrive steering when implemented                      (1.0–1.8 * CellTileSize should work)
+
+        [Header("Leader: Path Strict-ness")]
+        [SerializeField, Range(0f, 1f)] private float m_strictFollow01 = 0.85f; // 0 = loose/sway, 1 = strict/tight
+        [SerializeField] private float m_leaderLookAheadCells = 0.6f;           // 0.4–1.2
+        [SerializeField] private float m_leaderLookAheadSpeed = 0.15f;          // how much lookahead grows with speed
+        [SerializeField] private float m_lateralDamp = 6f;                      // 3–10: tightness to path segment
 
         [Header("Flocking: Separation")]
-        [SerializeField] private float _neighborRadius = 2.5f;
-        [SerializeField] private float _separationRadius = 1.1f;
-        [SerializeField] private float _leaderFollowDist = 1.0f;
+        [SerializeField] private float m_neighborRadius = 2.5f;
+        [SerializeField] private float m_separationRadius = 1.1f;
+        [SerializeField] private float m_leaderFollowDist = 1.0f;       // Cells behind the leader. On a 1-unit cell grid, 1.0 ends up being crowding on top of leader (2-4 good?)
 
         // NEW: Not Implemented
-        /*
-        [SerializeField] private float _exploreRadiusCells = 2.0f;
-        [SerializeField] private float _followDistanceCells = 2.0f;
-        [SerializeField] private float _bandMinCells = 1.5f;
-        [SerializeField] private float _bandMaxCells = 6.0f;
-        */
+        [SerializeField] private float m_exploreRadiusCells = 2.0f;     // how far they wander around anchor point
+        [SerializeField] private float m_followDistanceCells = 2.0f;    // anchor distance behind lead
+        [SerializeField] private float m_bandMinCells = 1.5f;           // inside this: no pull (free roam)
+        [SerializeField] private float m_bandMaxCells = 6.0f;           // outside this: full pull (rubber band)
+        [SerializeField] private float m_leaderSeparationBoost = 2.5f;  // stronger separation from leader
+
 
         [Header("Flocking: Weights")]
-        [SerializeField] private float _separationWeight = 1.4f;
-        [SerializeField] private float _cohesionWeight = 0.6f;
-        [SerializeField] private float _alignmentWeight = 0.5f;
-        [SerializeField] private float _followLeaderWeight = 1.0f;
-
-        [Header("Obstacle Avoidance (followers)")]
-        [SerializeField] private float _lookAhead = 0.9f;
-        [SerializeField] private float _sideOffset = 0.5f;
-        [SerializeField] private float _avoidWeight = 2.0f;
+        [SerializeField] private float m_separationWeight = 1.4f;
+        [SerializeField] private float m_cohesionWeight = 0.6f;
+        [SerializeField] private float m_alignmentWeight = 0.5f;
+        [SerializeField] private float m_followLeaderWeight = 1.0f;
 
 
-        private AgentMapSense _mapSense;
-        private AgentPathBuffer _pathBuffer;
+        private AgentMapSense m_mapSense;
+        private AgentPathBuffer m_pathBuffer;
 
-        private Vector3 _velocity;
+        private static readonly int ColorId = Shader.PropertyToID("_Color");
+        private MaterialPropertyBlock m_mpb;
+        private Renderer m_renderer;
 
 
-        private Vector3 _wanderOffset;  // curiosity 
-        private float _wanderNextTime;  // curiosity timer 
+        private Vector3 m_velocity;
+        private int m_lastSlideAxis; // -1 = Z, +1 = X, 0 = none
+
+        private Vector3 m_wanderOffset;  // curiosity 
+        private float m_wanderNextTime;  // curiosity timer 
 
 
 
         public SwarmState State { get; private set; } = SwarmState.STATE_SwarmingFollow;
-        public bool IsLeader => _isLeader;
-        public SwarmingAgent Leader => _leader;
-        public Transform Target => _target;
+        public bool IsLeader => m_isLeader;
+        public SwarmingAgent Leader => m_leader;
+        public Transform Target => m_target;
 
 
         public void SetState(SwarmState state) => State = state;
-        public void AssignLeaderStatus(bool isLeader) => _isLeader = isLeader;
-        public void AssignFollowerTheirLeader(SwarmingAgent target) => _leader = target;
-        public void AssignTarget(Transform target) => _target = target;
+        public void AssignLeaderStatus(bool isLeader) => m_isLeader = isLeader;
+        public void AssignFollowerTheirLeader(SwarmingAgent target) => m_leader = target;
+        public void AssignTarget(Transform target) => m_target = target;
 
 
         /*
 
 
         [Header("Random start/goal")]
-        [SerializeField, Range(0f, 1f)] private float _minManhattanFactor = 0.30f;
-        [SerializeField, Min(0)] private int _minManhattanClampMin = 2;
-        [SerializeField, Min(0)] private int _minManhattanClampMax = 200;   // safety
+        [SerializeField, Range(0f, 1f)] private float m_minManhattanFactor = 0.30f;
+        [SerializeField, Min(0)] private int m_minManhattanClampMin = 2;
+        [SerializeField, Min(0)] private int m_minManhattanClampMax = 200;   // safety
 
-        [Header("Visualization")] private bool _visualizeAll = true;    // show pathfinding + path + start/goal tiles
-        [SerializeField] private bool _visualizeFinalPath = true;       // show path
-        [SerializeField] private bool _showStartAndGaol = true;         // show path start/goal tiles
+        [Header("Visualization")] private bool m_visualizeAll = true;    // show pathfinding + path + start/goal tiles
+        [SerializeField] private bool m_visualizeFinalPath = true;       // show path
+        [SerializeField] private bool m_showStartAndGaol = true;         // show path start/goal tiles
 
         [Header("Debug")]
         [SerializeField] private bool drawDebug = true;
@@ -117,16 +127,16 @@ namespace AI_Workshop03.AI
         private bool isLeader;
         private bool isFollower;
 
-        private List<int> _pathIndices;
-        private int _pathCursor;
+        private List<int> m_pathIndices;
+        private int m_pathCursor;
 
         private Vector3 velocity = Vector3.zero;
 
-        private int _startIndex = -1;
-        private int _goalIndex = -1;
+        private int m_startIndex = -1;
+        private int m_goalIndex = -1;
         private const int MaxPickAttempts = 64;
 
-        private MapData _data;
+        private MapData m_data;
 
         */
 
@@ -134,8 +144,10 @@ namespace AI_Workshop03.AI
 
         private void Awake()
         {
-            _mapSense = GetComponent<AgentMapSense>();
-            _pathBuffer = GetComponent<AgentPathBuffer>();
+            m_mapSense = GetComponent<AgentMapSense>();
+            m_pathBuffer = GetComponent<AgentPathBuffer>();
+            m_renderer = GetComponent<Renderer>();
+            m_mpb = new MaterialPropertyBlock();
         }
 
         private void OnEnable() 
@@ -148,37 +160,76 @@ namespace AI_Workshop03.AI
         }
 
 
+        public void Configure(bool isLeader, SwarmingAgent leader, Transform target)
+        {
+            // Reset movement bleedover if reeused through pooling 
+            m_velocity = Vector3.zero;
+            m_pathBuffer.Clear();
+
+            AssignLeaderStatus(isLeader);
+            if (!isLeader) AssignFollowerTheirLeader(leader);
+
+            AssignTarget(target);
+
+            // Tell brain after fields are set, reset any previous per-role state
+            GetComponent<AgentBrain>().ApplyRole(isLeader);
+
+            m_wanderOffset = Random.insideUnitSphere;
+            m_wanderOffset.y = 0f;
+            m_wanderOffset = m_wanderOffset.normalized;
+            m_wanderNextTime = 0f;
+        }
+
+        public void SetColor(Color32 color)
+        {
+            m_renderer.GetPropertyBlock(m_mpb);
+            m_mpb.SetColor(ColorId, color);
+            m_renderer.SetPropertyBlock(m_mpb);
+        }
+
+
+
         private void Update()
         {
-            if (_mapSense.Data == null) return;
+
+            Movement();
+        }
+
+
+
+        private void Movement()
+        {
+            if (m_mapSense == null || m_pathBuffer == null) return;
+            MapData mapData = m_mapSense.Data;
+            if (mapData == null) return;
 
             Vector3 steering = Vector3.zero;
 
             // Pick a steering mode based on leadership status (leader = follow path, follower = follow leader + flock + avoid) 
-            if (_isLeader)
+            if (m_isLeader)
             {
-                steering += ComputeLeaderSteer();
+                steering += ComputeLeaderSteer(mapData);
             }
             else
             {
-                steering += ComputeFollowerSteer();
+                steering += ComputeFollowerSteer(mapData);
             }
 
             // Convert boids-like steering into velocity (acceleration-limited)
-            _velocity += Vector3.ClampMagnitude(steering, _maxAccel) * Time.deltaTime;
-            _velocity = Vector3.ClampMagnitude(_velocity, _maxSpeed);
+            m_velocity += Vector3.ClampMagnitude(steering, m_maxAccel) * Time.deltaTime;
+            m_velocity = Vector3.ClampMagnitude(m_velocity, m_maxSpeed);
 
 
-            // --- Movement step (HARD map constraint: never enter blocked tiles) ---
-            Vector3 delta = _velocity * Time.deltaTime;
+            // --- Movement step (HARD map constraint: never enter blocked tiles, calculated in the Compute Steering right before this) ---
+            Vector3 delta = m_velocity * Time.deltaTime;
 
             // Keep agent on safe y plane for checks + final position
             Vector3 current = transform.position;
-            current.y = _agentPlaneOffsetY;
+            current.y = m_agentPlaneOffsetY;
             transform.position = current;
 
             // High-speed safety: sub-step to avoid tunneling across thin obstacles
-            int steps = Mathf.CeilToInt(delta.magnitude / (_mapSense.Data.CellTileSize * 0.25f));   // means max step is quarter tile
+            int steps = Mathf.CeilToInt(delta.magnitude / (mapData.CellTileSize * 0.25f));   // means max step is quarter tile
             steps = Mathf.Clamp(steps, 1, 12);                                                      // Clamp(1, 8) is good. If fast fast agents, bump max to 12 but otherwise revert to that.
             Vector3 step = delta / steps;
 
@@ -189,13 +240,14 @@ namespace AI_Workshop03.AI
             for (int i = 0; i < steps; i++)
             {
                 Vector3 next = transform.position + step;
-                next.y = _agentPlaneOffsetY;
+                next.y = m_agentPlaneOffsetY;
 
                 // If the full step lands on a walkable tile, apply it.
-                if (_mapSense.IsWalkableWorld(next))
+                if (m_mapSense.IsWalkableWorld(next))
                 {
                     transform.position = next;
                     appliedTotal += step;
+                    m_lastSlideAxis = 0;
                     continue;
                 }
 
@@ -203,44 +255,87 @@ namespace AI_Workshop03.AI
                 Vector3 pos = transform.position;
 
                 Vector3 slideX = pos + new Vector3(step.x, 0f, 0f);
-                slideX.y = _agentPlaneOffsetY;
+                slideX.y = m_agentPlaneOffsetY;
 
                 Vector3 slideZ = pos + new Vector3(0f, 0f, step.z);
-                slideZ.y = _agentPlaneOffsetY;
+                slideZ.y = m_agentPlaneOffsetY;
 
-                bool okX = _mapSense.IsWalkableWorld(slideX);
-                bool okZ = _mapSense.IsWalkableWorld(slideZ);
+                bool okX = m_mapSense.IsWalkableWorld(slideX);
+                bool okZ = m_mapSense.IsWalkableWorld(slideZ);
 
                 if (okX && !okZ)
                 {
                     transform.position = slideX;
                     appliedTotal += new Vector3(step.x, 0f, 0f);
+
+                    // Removing most of the inerta that pushes agent face-first into a wall (Z) on continous sideways movement
+                    m_velocity.z *= 0.1f;
+                    m_lastSlideAxis = +1; // X
                     continue;
                 }
                 if (okZ && !okX)
                 {
                     transform.position = slideZ;
                     appliedTotal += new Vector3(0f, 0f, step.z);
+
+                    // Removing most of the inerta that pushes agent face-first into a wall (X) on continous sideways movement
+                    m_velocity.x *= 0.1f;
+                    m_lastSlideAxis = -1; // Z
                     continue;
                 }
                 if (okX && okZ)
                 {
+                    // Prefer previous slide axis to avoid X/Z flip-flop (pirouette)
+                    if (m_lastSlideAxis == +1)
+                    {
+                        transform.position = slideX;
+                        appliedTotal += new Vector3(step.x, 0f, 0f);
+
+                        m_velocity.z *= 0.1f;
+                        continue;
+                    }
+                    if (m_lastSlideAxis == -1)
+                    {
+                        transform.position = slideZ;
+                        appliedTotal += new Vector3(0f, 0f, step.z);
+
+                        m_velocity.x *= 0.1f;
+                        continue;
+                    }
+
+                    // No previous preference: pick bigger component once, then stick next time
                     if (Mathf.Abs(step.x) >= Mathf.Abs(step.z))
                     {
                         transform.position = slideX;
                         appliedTotal += new Vector3(step.x, 0f, 0f);
+
+                        m_velocity.z *= 0.1f;
+                        m_lastSlideAxis = +1; // X
                     }
                     else
                     {
                         transform.position = slideZ;
                         appliedTotal += new Vector3(0f, 0f, step.z);
+
+                        m_velocity.x *= 0.1f;
+                        m_lastSlideAxis = -1; // Z
                     }
                     continue;
                 }
 
                 // Fully blocked on this sub-step: stop (and kill velocity so it doesn't keep pushing)
-                _velocity = Vector3.zero;
+                m_velocity = Vector3.zero;
+                m_lastSlideAxis = 0;
                 break;
+            }
+
+            float dt = Time.deltaTime;
+            if (dt > 1e-6f)
+            {
+                Vector3 actualVel = appliedTotal / dt;
+
+                // Blend for a bit of inertia, but still anchor to reality
+                m_velocity = Vector3.Lerp(m_velocity, actualVel, 0.65f);
             }
 
             // Rotate to face movement (use appliedDelta so blocked sliding looks correct)
@@ -250,118 +345,233 @@ namespace AI_Workshop03.AI
 
 
 
-        public void Configure(bool isLeader, SwarmingAgent leader, Transform target)
-        {
-            // Reset movement bleedover if reeused through pooling 
-            _velocity = Vector3.zero;
-            _pathBuffer.Clear();
-
-            AssignLeaderStatus(isLeader);
-            if (!isLeader) AssignFollowerTheirLeader(leader);
-
-            // Reset any previous per-role state
-            SetState(isLeader ? SwarmState.STATE_Patrolling : SwarmState.STATE_SwarmingFollow);
-
-
-            AssignTarget(target);
-
-            // Tell brain after fields are set
-            GetComponent<AgentBrain>().ApplyRole(isLeader);
-
-            _wanderOffset = Random.insideUnitSphere;
-            _wanderOffset.y = 0f;
-            _wanderOffset = _wanderOffset.normalized;
-            _wanderNextTime = 0f;
-        }
-
-
-
-
+        #region Leader behaviour
 
         // NOTE WARNING:
         // Path already avoids blocked cells. If I later add smooth/skip waypoints, I must remeber to add a blocked-cell veto like followers use to not walk into obstacles.
 
         // --- Path A: Leader movement ---
-        private Vector3 ComputeLeaderSteer()
+        private Vector3 ComputeLeaderSteer(MapData mapData)
         {
             // NOTE: 
             // Leader steering lacks map “blocked veto” if later I add smoothing/skip waypoints 
-            // Using Seek: fast + simple but may overshoot/jitter at waypoint.
-            // Update Plan for Later: switch to Arrive(towardsWaypoint, _slowingRadius) for smoother stops.
 
 
             // If unit is a leader: follows its path if it has one, otherwise do nothing
-            if (_pathBuffer.HasPath)
+            if (!m_pathBuffer.HasPath) return Vector3.zero;
+            if (mapData == null) return Vector3.zero;
+
+
+            // --- Waypoint advance logic ---
+
+            Vector3 waypoint = m_pathBuffer.CurrentWaypointWorld(mapData, yOffset: m_agentPlaneOffsetY);
+            Vector3 toWaypoint = waypoint - transform.position;
+            toWaypoint.y = 0f;
+
+            float speed = new Vector3(m_velocity.x, 0f, m_velocity.z).magnitude;
+            float cell = mapData.CellTileSize;
+
+            // NOTE: waypointRadius is not enough when moving fast, because it can skip over the waypoint in one frame. Speed-based buffer to ensure it doesn't skip waypoints.
+            // Tune multiplier as needed (1.5x is a good starting point, but may need to be higher for very fast agents or lower for slow agents to prevent jittery behavior at the end of the path)
+            float passDist = m_waypointRadius + speed * Time.deltaTime * 1.5f;
+            passDist = Mathf.Max(passDist, 0.75f * cell);   // cap to ensure it’s not too small for grid centers
+            passDist = Mathf.Min(passDist, 1.25f * cell);   // cap so it can’t skip a bunch of cells 
+
+            // advance waypoint if close enough or if overshot and moving away (handles fast movement + prevents jittery back-and-forth at the end of the path)
+            float radius = Mathf.Max(m_waypointRadius, 0.45f * cell);
+            if (m_pathBuffer.ShouldAdvanceWithPassDistance(toWaypoint, m_velocity, radius, passDist))
             {
-                Vector3 waypoint = _pathBuffer.CurrentWaypointWorld(_mapSense.Data, yOffset: _agentPlaneOffsetY);
-                Vector3 toWaypoint = waypoint - transform.position;
-                toWaypoint.y = 0f;
+                m_pathBuffer.Advance();
+                if (!m_pathBuffer.HasPath) return -m_velocity;  // brake / stop steering at end of path
 
-                // advance waypoint 
-                if (_pathBuffer.ShouldAdvance(toWaypoint, _velocity, _waypointRadius))
-                {
-                    _pathBuffer.Advance();
-                    return Vector3.zero; // let next frame target the new waypoint
-                }
-
-                // original planned path
-                Vector3 desired = ArriveWorld(waypoint, _slowingRadius);
-
-                // Probe in the direction unit intend to move
-                Vector3 desiredDir = desired.sqrMagnitude > 1e-6f ? desired.normalized :
-                                     (_velocity.sqrMagnitude > 1e-6f ? _velocity.normalized : Vector3.zero);
-
-                Vector3 avoid = _mapSense.ComputeObstacleAvoidance(
-                                    transform.position, desiredDir,
-                                    _lookAhead, _sideOffset, _agentPlaneOffsetY) * _avoidWeight;
-
-                return desired + avoid;
+                // steer toward next waypoint immediately for smoother path following (instead of waiting one frame to update the waypoint and then steering)
+                Vector3 nextWaypoint = m_pathBuffer.CurrentWaypointWorld(mapData, yOffset: m_agentPlaneOffsetY);
+                waypoint = nextWaypoint; 
             }
 
-            return Vector3.zero;
+
+            // --- LOSE / SWAY steer (not a sense of hurry, does pirouetting more often) ---
+            Vector3 loose = ComputeLeaderSteer_Loose(waypoint);
+
+            // --- STRICT / TIGHT steer (segment-carrot + lateral damp + wall slowdown) ---
+            Vector3 strict = ComputeLeaderSteer_Strict(mapData);
+
+            // Blend between them (0 = loose, 1 = strict)
+            return Vector3.Lerp(loose, strict, m_strictFollow01);
         }
 
 
+        private Vector3 ComputeLeaderSteer_Loose(Vector3 waypoint)
+        {
+            // original planned path
+            Vector3 steering = ArriveWorld(waypoint, m_slowingRadius);
+
+
+
+            Vector3 velXZ = m_velocity;
+            velXZ.y = 0f;
+
+            Vector3 toWaypoint = waypoint - transform.position;
+            toWaypoint.y = 0f;
+
+            Vector3 probeDir;
+
+            // Probe in the direction unit intend to travel this frame
+            if (velXZ.sqrMagnitude > 1e-6f)
+            {
+                // Moving already: probe where agent actually travelling.
+                probeDir = velXZ.normalized;
+            }
+            else if (toWaypoint.sqrMagnitude > 1e-6f)
+            {
+                // Nearly stopped: probe toward the waypoint.
+                probeDir = toWaypoint.normalized;
+            }
+            else
+            {
+                // No meaningful direction to probe.
+                return steering;
+            }
+
+            // Only avoid if forward is blocked OR BOTH sides are blocked (tight corridor, otherwise leave path alone. Trying to avoid the pirouette problem when path is hugging diagonal obstacle-corners)
+            bool needAvoid = ProbePath(probeDir);
+            if (!needAvoid)
+                return steering;    // path is clear, no need to apply avoidance steer. Just follow path as normal.
+
+            // If forward/sides probe is blocked, then apply avoidance steer. Otherwise, if way ahead is clear, do not apply avoidance and just follow path as normal.
+            // This way it won't try to avoid if it's already following a path that is hugging along a wall (otherwise it tries to avoid the wall it's following and ends up pirouetting in place)
+            Vector3 avoid = m_mapSense.ComputeObstacleAvoidance(
+                       transform.position, probeDir,
+                       m_lookAhead, m_sideOffset, m_agentPlaneOffsetY) * m_avoidWeight;
+
+            // avoid can be very strong, clamping it to a reasonable max to prevent erratic behavior. Tune needed. (0.5–0.8 * maxAccel seems good in testing)
+            float maxAvoid = 0.75f * m_maxAccel;
+            avoid = Vector3.ClampMagnitude(avoid, maxAvoid);
+
+            return steering + avoid;
+        }
+
+        private Vector3 ComputeLeaderSteer_Strict(MapData mapData)
+        {
+
+            for (int safety = 0; safety < 6; safety++)
+            {
+                int cursor = m_pathBuffer.Cursor;
+                var path = m_pathBuffer.Path;
+                if (mapData == null || path == null || cursor < 0 || cursor >= path.Count) return Vector3.zero;
+
+                Vector3 pos = transform.position;
+                pos.y = m_agentPlaneOffsetY;
+
+                // Current + previous waypoint (segment)                    // switch to WaypointWorldAtCursorOffset() ?
+                Vector3 waypointCur = mapData.IndexToWorldCenterXZ(path[cursor], m_agentPlaneOffsetY);
+                Vector3 waypointPrev = (cursor > 0)
+                    ? mapData.IndexToWorldCenterXZ(path[cursor - 1], m_agentPlaneOffsetY)
+                    : pos;
+
+                Vector3 segment = waypointCur - waypointPrev;
+                segment.y = 0f;
+                float segmentLength = segment.magnitude;
+                if (segmentLength <= 1e-6f)
+                {
+                    // Degenerate segment (duplicate waypoint) — skip it.
+                    m_pathBuffer.Advance();
+                    if (!m_pathBuffer.HasPath) return -m_velocity;
+                    continue;
+                }
+
+                Vector3 segmentDir = segmentLength > 1e-6f ? (segment / segmentLength) : (waypointCur - pos).normalized;
+                segmentDir.y = 0f;
+                if (segmentDir.sqrMagnitude < 1e-6f)
+                    return -m_velocity; // or Vector3.zero; but braking is usually nicer
+                segmentDir.Normalize();
+
+                // projection distance along segment (from prev)
+                float t = 0f;
+                if (segmentLength > 1e-6f)
+                    t = Mathf.Clamp(Vector3.Dot((pos - waypointPrev), segmentDir), 0f, segmentLength);
+
+                float advRadius = Mathf.Max(m_waypointRadius, 0.45f * mapData.CellTileSize);
+
+                // If we’re basically already at the end of this segment, advance cursor.
+                if (segmentLength > 1e-6f && t >= segmentLength - advRadius)
+                {
+                    m_pathBuffer.Advance();
+                    if (!m_pathBuffer.HasPath) return -m_velocity; // end of path: brake
+                    continue; // try again on next segment
+                }
+
+
+                // lookahead grows with speed to still work with high speed agents
+                float speed = new Vector3(m_velocity.x, 0f, m_velocity.z).magnitude;
+                float lookAhead = (m_leaderLookAheadCells * mapData.CellTileSize) + speed * m_leaderLookAheadSpeed;
+
+                float targetT = Mathf.Clamp(t + lookAhead, 0f, segmentLength);
+                Vector3 carrot = waypointPrev + segmentDir * targetT;
+                carrot.y = m_agentPlaneOffsetY;
+
+                // Lateral damping = tightness
+                Vector3 v = m_velocity; v.y = 0f;
+                Vector3 vPar = Vector3.Dot(v, segmentDir) * segmentDir; // parallel component is the part of velocity that is moving along the path
+                Vector3 vPerp = v - vPar;                               // perpendicular component is the part of velocity that is pushing into the wall when following a path that hugs a wall
+                Vector3 lateralDampSteer = (-vPerp) * m_lateralDamp;
+
+                // Slow down if about to face-plant into a wall 
+                float speedScale = SpeedScaleFromProbe(segmentDir, pos);
+                Vector3 arrive = ArriveWorldScaled(carrot, m_slowingRadius, speedScale);
+
+                return arrive + lateralDampSteer;
+            }
+
+            return Vector3.zero; // fallback if we advanced too many times
+        }
+
+
+        #endregion
+
+
+
+        #region Flocking behaviour
+
         // --- Path B: Follower movement ---
-        private Vector3 ComputeFollowerSteer()
+        private Vector3 ComputeFollowerSteer(MapData mapData)
         {
             // Only if unit is a follower: use flocking instead of A* pathing to move. But they are still slightly map aware
-                        
+
             Vector3 flock = ComputeFlocking();  // compute Seperation(don’t overlap), Cohesion(stay together), and Alignment(match direction)
             Vector3 follow = Vector3.zero;
 
             // follow their leader if they have one
-            if (_leader != null)
+            if (m_leader != null)
             {
-                Vector3 toLeader = (_leader.transform.position - transform.position);
-
+                Vector3 toLeader = (m_leader.transform.position - transform.position);
 
                 // This made the boid collapse into a crowd like aura, or like pond scum. But could be fun to implement as a mode later   
-                //follow = SeekTo(toLeader) * _followLeaderWeight;
+                //follow = SeekTo(toLeader) * m_followLeaderWeight;
 
 
                 // If I want the crowd aura, just keep the above line 
                 // This way it makes sure leader is distinct, and followers follow behind propperly. Added all lines of code below to fix problem.
-                Vector3 leaderDir = _leader.transform.forward; // or use leader velocity if you expose it
-                float followDist = _leaderFollowDist; // tune (or 2 * CellTileSize)
-                Vector3 followPoint = _leader.transform.position - leaderDir * followDist;
+                Vector3 leaderDir = m_leader.transform.forward; // or use leader velocity if you expose it
+                float followDist = m_leaderFollowDist * mapData.CellTileSize;
+                Vector3 followPoint = m_leader.transform.position - leaderDir * followDist;
 
-                follow = ArriveWorld(followPoint, slowRadius: followDist) * _followLeaderWeight;
+                follow = ArriveWorld(followPoint, slowRadius: followDist) * m_followLeaderWeight;
 
 
                 // Third design option, need to try what feels best or make a hotswap method.
                 // Follow a moving anchor region.
                 // Instead of seeking the leader, seek an anchor point behind the leader and let cohesion/alignment keep them together.
                 /*
-                Vector3 leaderDir = _leader.VelocityXZ.sqrMagnitude > 0.01f
-                    ? _leader.VelocityXZ.normalized
-                    : _leader.transform.forward;
+                Vector3 leaderDir = m_leader.VelocityXZ.sqrMagnitude > 0.01f
+                    ? m_leader.VelocityXZ.normalized
+                    : m_leader.transform.forward;
 
-                float followDist = _followDistanceCells * _mapSense.Data.CellTileSize; // e.g. 2–4 cells
-                Vector3 anchor = _leader.transform.position - leaderDir * followDist;
+                float followDist = m_followDistanceCells * mapData.CellTileSize; // e.g. 2–4 cells
+                Vector3 anchor = m_leader.transform.position - leaderDir * followDist;
 
                 // Arrive to the anchor, not the leader.
-                follow = ArriveWorld(anchor, slowRadius: followDist) * _followLeaderWeight;
+                follow = ArriveWorld(anchor, slowRadius: followDist) * m_followLeaderWeight;
                 */
 
 
@@ -370,18 +580,18 @@ namespace AI_Workshop03.AI
                 /*
                 // NEW, needs more testing
                 // Curiosity, let them wander around a bit
-                if (Time.time >= _wanderNextTime)
+                if (Time.time >= m_wanderNextTime)
                 {
                     Vector2 r = Random.insideUnitCircle.normalized;
-                    _wanderOffset = new Vector3(r.x, 0f, r.y);
-                    _wanderNextTime = Time.time + Random.Range(0.6f, 1.4f);
+                    m_wanderOffset = new Vector3(r.x, 0f, r.y);
+                    m_wanderNextTime = Time.time + Random.Range(0.6f, 1.4f);
                 }
 
-                float exploreRadius = _exploreRadiusCells * _mapSense.Data.CellTileSize; // e.g. 2–5 cells
-                Vector3 exploreTarget = anchor + _wanderOffset * exploreRadius;
+                float exploreRadius = m_exploreRadiusCells * mapData.CellTileSize; // e.g. 2–5 cells
+                Vector3 exploreTarget = anchor + m_wanderOffset * exploreRadius;
 
 
-                Vector3 follow = ArriveWorld(exploreTarget, slowRadius: exploreRadius) * _followLeaderWeight;
+                Vector3 follow = ArriveWorld(exploreTarget, slowRadius: exploreRadius) * m_followLeaderWeight;
                 */
 
 
@@ -394,22 +604,19 @@ namespace AI_Workshop03.AI
             Vector3 desiredDir = desired.sqrMagnitude > 1e-6f ? desired.normalized : Vector3.zero;
 
             // avoid map-edges and obstacles / blocked tiles 
-            Vector3 avoid = _mapSense.ComputeObstacleAvoidance(transform.position, desiredDir, _lookAhead, _sideOffset, _agentPlaneOffsetY) * _avoidWeight;
+            Vector3 avoid = m_mapSense.ComputeObstacleAvoidance(transform.position, desiredDir, m_lookAhead, m_sideOffset, m_agentPlaneOffsetY) * m_avoidWeight;
 
             // decide final movement for this unit 
             return desired + avoid;
         }
 
 
-
-        #region Flocking behaviour
-
         // flock steering, boids-ish style. One neighbor scan, then 3 small rule methods. 
         private Vector3 ComputeFlocking()
         {
             // --- Tuned radii (use squared distance to avoid sqrt) ---
-            float neighborRadSqr = _neighborRadius * _neighborRadius;
-            float separationRadSqr = _separationRadius * _separationRadius;
+            float neighborRadSqr = m_neighborRadius * m_neighborRadius;
+            float separationRadSqr = m_separationRadius * m_separationRadius;
 
             // --- Aggregates collected from neighbors ---
             Vector3 position = transform.position;
@@ -420,8 +627,8 @@ namespace AI_Workshop03.AI
             int neighborCount = 0;
 
 
-            // For each nearby neighbor (within _neighborRadius):
-            // - Separation: push away if inside _separationRadius (stronger when very close).
+            // For each nearby neighbor (within m_neighborRadius):
+            // - Separation: push away if inside m_separationRadius (stronger when very close).
             // - Cohesion: accumulate neighbor positions to compute neighbor center.
             // - Alignment: accumulate neighbor velocities to compute avg heading/speed.
             for (int i = 0; i < All.Count; i++)
@@ -438,7 +645,7 @@ namespace AI_Workshop03.AI
 
                 neighborCount++;
                 cohesionPosSum += other.transform.position;         // later becomes "center of neighbors"
-                alignmentVelSum += other._velocity;                 // later becomes "average neighbor velocity"
+                alignmentVelSum += other.m_velocity;                 // later becomes "average neighbor velocity"
 
                 // separation only applies inside the smaller separation radius
                 if (distSqr < separationRadSqr && distSqr > 1e-6f)
@@ -453,7 +660,7 @@ namespace AI_Workshop03.AI
             // NOTE: weights tune behavior, not correctness.
             // High separation = loose flock; High cohesion = tight blob; High alignment = smooth flow.
 
-            // For each nearby neighbor (within _neighborRadius):
+            // For each nearby neighbor (within m_neighborRadius):
             Vector3 separation = ComputeSeparationFromAgg(separationSum);
             Vector3 cohesion = ComputeCohesionFromAgg(cohesionPosSum, neighborCount, position);
             Vector3 alignment = ComputeAlignmentFromAgg(alignmentVelSum, neighborCount);
@@ -467,14 +674,14 @@ namespace AI_Workshop03.AI
         private Vector3 ComputeSeparationFromAgg(Vector3 separationSum)
         {
             // separationSum already encodes distance weighting (1/dist^2)
-            return separationSum * _separationWeight;
+            return separationSum * m_separationWeight;
         }
 
         // Cohesion: stay with group, prevent drifting away   (pull toward neighbor centroid)
         private Vector3 ComputeCohesionFromAgg(Vector3 cohesionPosSum, int neighborCount, Vector3 myPos)
         {
             Vector3 center = cohesionPosSum / neighborCount;
-            return SeekTo(center - myPos) * _cohesionWeight;
+            return SeekTo(center - myPos) * m_cohesionWeight;
         }
 
         // Alignment: go with the flow and match alignment of group direction.   (match avg neighbor velocity)
@@ -483,10 +690,10 @@ namespace AI_Workshop03.AI
             Vector3 avgVel = alignmentVelSum / neighborCount;
 
             // Convert avg velocity into a desired velocity at unit's max speed
-            Vector3 desiredVel = avgVel.sqrMagnitude > 1e-6f ? avgVel.normalized * _maxSpeed : Vector3.zero;
+            Vector3 desiredVel = avgVel.sqrMagnitude > 1e-6f ? avgVel.normalized * m_maxSpeed : Vector3.zero;
 
             // Steering force tries to change unit's velocity toward desiredVel
-            return (desiredVel - _velocity) * _alignmentWeight;
+            return (desiredVel - m_velocity) * m_alignmentWeight;
         }
 
 
@@ -502,8 +709,73 @@ namespace AI_Workshop03.AI
             toTarget.y = 0f;                        // flatten direction
             if (toTarget.sqrMagnitude < 1e-6f) return Vector3.zero;
 
-            Vector3 desiredVel = toTarget.normalized * _maxSpeed;
-            return (desiredVel - _velocity);
+            Vector3 desiredVel = toTarget.normalized * m_maxSpeed;
+            return (desiredVel - m_velocity);
+        }
+
+
+        #endregion
+
+
+
+        public bool TrySnapToNearestWalkable(int radius = 6)
+        {
+            if (m_mapSense == null) return false;
+            MapData mapData = m_mapSense.Data;
+            if (mapData == null) return false;
+
+            if (!m_mapSense.TryWorldToIndex(transform.position, out int startIdx))
+                return false;
+
+            if (!mapData.IsBlocked[startIdx])
+                return true; // already safe
+
+            if (m_mapSense.TryGetNearestUnblockedIndex(startIdx, radius, out int safeIdx))
+            {
+                Vector3 p = mapData.IndexToWorldCenterXZ(safeIdx, m_agentPlaneOffsetY);
+                transform.position = p;
+                m_velocity = Vector3.zero;
+                return true;
+            }
+
+            return false;
+        }
+
+
+        // Move this into AgentMapSense.cs or not? Hybrid responsability with local variables  
+        private bool ProbePath(Vector3 forward)
+        {
+            Vector3 right = new Vector3(forward.z, 0f, -forward.x);
+
+            Vector3 probeF = transform.position + forward * m_lookAhead;
+            Vector3 probeL = probeF - right * (m_sideOffset * 0.6f); // tighter than follower probes
+            Vector3 probeR = probeF + right * (m_sideOffset * 0.6f);
+
+            probeF.y = probeL.y = probeR.y = m_agentPlaneOffsetY;
+
+            bool blockedF = !m_mapSense.IsWalkableWorld(probeF);
+            bool blockedL = !m_mapSense.IsWalkableWorld(probeL);
+            bool blockedR = !m_mapSense.IsWalkableWorld(probeR);
+
+            bool needAvoid = blockedF || (blockedL && blockedR);
+            return needAvoid;
+        }
+
+
+        private float SpeedScaleFromProbe(Vector3 dir, Vector3 pos)
+        {
+            // “slow down if walking into a wall”, not repel
+            float la = m_lookAhead;
+            Vector3 p1 = pos + dir * (la * 0.33f);
+            Vector3 p2 = pos + dir * (la * 0.66f);
+            Vector3 p3 = pos + dir * (la * 1.00f);
+
+            p1.y = p2.y = p3.y = m_agentPlaneOffsetY;
+
+            if (!m_mapSense.IsWalkableWorld(p1)) return 0.0f;
+            if (!m_mapSense.IsWalkableWorld(p2)) return 0.33f;
+            if (!m_mapSense.IsWalkableWorld(p3)) return 0.66f;
+            return 1.0f;
         }
 
 
@@ -518,43 +790,31 @@ namespace AI_Workshop03.AI
         {
             toTarget.y = 0f;                        // flatten direction
             float dist = toTarget.magnitude;
-            if (dist <= 0.001f) return -_velocity;  // brake
+            if (dist <= 0.001f) return -m_velocity;  // brake
 
             float targetSpeed = (dist < slowRadius)
-                ? _maxSpeed * (dist / slowRadius)
-                : _maxSpeed;
+                ? m_maxSpeed * (dist / slowRadius)
+                : m_maxSpeed;
 
             Vector3 desiredVel = toTarget * (targetSpeed / dist);
-            return (desiredVel - _velocity);        // steering
+            return (desiredVel - m_velocity);        // steering
         }
 
 
-        #endregion
-
-
-
-        public bool TrySnapToNearestWalkable(int radius = 6)
+        private Vector3 ArriveWorldScaled(Vector3 worldTarget, float slowRadius, float speedScale)
         {
-            if (_mapSense == null || _mapSense.Data == null) return false;
+            Vector3 toTarget = worldTarget - transform.position;
+            toTarget.y = 0f;
 
-            if (!_mapSense.TryWorldToIndex(transform.position, out int startIdx))
-                return false;
+            float dist = toTarget.magnitude;
+            if (dist <= 0.001f) return -m_velocity;
 
-            if (!_mapSense.Data.IsBlocked[startIdx])
-                return true; // already safe
+            float targetSpeed = (dist < slowRadius) ? m_maxSpeed * (dist / slowRadius) : m_maxSpeed;
+            targetSpeed *= Mathf.Clamp01(speedScale);
 
-            if (_mapSense.TryGetNearestUnblockedIndex(startIdx, radius, out int safeIdx))
-            {
-                Vector3 p = _mapSense.Data.IndexToWorldCenterXZ(safeIdx, _agentPlaneOffsetY);
-                transform.position = p;
-                _velocity = Vector3.zero;
-                return true;
-            }
-
-            return false;
+            Vector3 desiredVel = toTarget * (targetSpeed / dist);
+            return desiredVel - m_velocity;
         }
-
-
 
 
 

@@ -9,12 +9,12 @@ namespace AI_Workshop03.AI
     public sealed class AgentMapSense : MonoBehaviour
     {
 
-        [SerializeField] private MapManager _mapManager;
+        [SerializeField] private MapManager m_mapManager;
 
-        private MapData _data;
+        private MapData m_data;
 
-        public MapManager MapManager => _mapManager;    
-        public MapData Data => _data;
+        public MapManager MapManager => m_mapManager;    
+        public MapData Data => m_data;
 
 
         public event Action<MapData> OnDataChanged;
@@ -35,12 +35,12 @@ namespace AI_Workshop03.AI
                 _mapManager = FindFirstObjectByType<MapManager>();
             */
 
-            if (_mapManager != null)
+            if (m_mapManager != null)
             {
-                _mapManager.OnMapRebuiltDataReady += HandleMapRebuilt;
+                m_mapManager.OnMapRebuiltDataReady += HandleMapRebuilt;
 
                 // If map already exists, sync immediately
-                var current = _mapManager.Data;
+                var current = m_mapManager.Data;
                 if (current != null)
                     HandleMapRebuilt(current);
             }
@@ -48,8 +48,8 @@ namespace AI_Workshop03.AI
 
         private void OnDisable()
         {
-            if (_mapManager != null)
-                _mapManager.OnMapRebuiltDataReady -= HandleMapRebuilt;
+            if (m_mapManager != null)
+                m_mapManager.OnMapRebuiltDataReady -= HandleMapRebuilt;
         }
 
 
@@ -58,20 +58,20 @@ namespace AI_Workshop03.AI
         // a setter for spawner injection, also ensures correct MapManager is selected if multile exists
         public void SetMapManager(MapManager mapM)
         {
-            if (_mapManager == mapM) return;
+            if (m_mapManager == mapM) return;
 
             // Unhook old
-            if (_mapManager != null)
-                _mapManager.OnMapRebuiltDataReady -= HandleMapRebuilt;
+            if (m_mapManager != null)
+                m_mapManager.OnMapRebuiltDataReady -= HandleMapRebuilt;
 
-            _mapManager = mapM;
+            m_mapManager = mapM;
 
             // Hook new + sync
-            if (_mapManager != null)
+            if (m_mapManager != null)
             {
-                _mapManager.OnMapRebuiltDataReady += HandleMapRebuilt;
+                m_mapManager.OnMapRebuiltDataReady += HandleMapRebuilt;
 
-                var current = _mapManager.Data;
+                var current = m_mapManager.Data;
                 if (current != null)
                     HandleMapRebuilt(current);
             }
@@ -80,9 +80,9 @@ namespace AI_Workshop03.AI
 
         private void HandleMapRebuilt(MapData data)
         {
-            _data = data;
+            m_data = data;
 
-            OnDataChanged?.Invoke(_data);
+            OnDataChanged?.Invoke(m_data);
         }
 
 
@@ -90,42 +90,42 @@ namespace AI_Workshop03.AI
         public bool TryWorldToIndex(Vector3 worldPos, out int index)
         {
             index = -1;
-            if (_data == null) return false;
+            if (m_data == null) return false;
 
-            return _data.TryWorldToIndexXZ(worldPos, out index);
+            return m_data.TryWorldToIndexXZ(worldPos, out index);
         }
 
         public bool IsWalkableIndex(int index)
         {
-            if (_data == null) return false;
-            if (!_data.IsValidCellIndex(index)) return false;
+            if (m_data == null) return false;
+            if (!m_data.IsValidCellIndex(index)) return false;
 
-            return !_data.IsBlocked[index];
+            return !m_data.IsBlocked[index];
         }
 
         public bool IsWalkableWorld(Vector3 worldPos)
         {
-            if (_data == null) return false;
+            if (m_data == null) return false;
             if (!TryWorldToIndex(worldPos, out int idx)) return false;
-            return !_data.IsBlocked[idx];
+            return !m_data.IsBlocked[idx];
         }
 
         public Vector3 IndexToWorldCenter(int index, float yOffset = 0f)
         {
-            if (_data == null) return transform.position;
+            if (m_data == null) return transform.position;
 
-            return _data.IndexToWorldCenterXZ(index, yOffset);
+            return m_data.IndexToWorldCenterXZ(index, yOffset);
         }
 
         public bool TryGetValidStartIndexFromCurrentPos(out int currentStartIdx)
         {
-            if (_data == null)
+            if (m_data == null)
             {
                 currentStartIdx = -1; 
                 return false;
             }
 
-            MapData data = _data;
+            MapData data = m_data;
 
             if (!data.TryWorldToIndexXZ(transform.position, out currentStartIdx))
                 return false;
@@ -139,9 +139,11 @@ namespace AI_Workshop03.AI
             return true; 
         }
 
+        // spiral-ish scan, could be optimized and/or look into alternative ways of patterns-searching - but this is fine for now
+        // NOTE: switch to using the unchecked CoordToIndex() since coords are validated
         public bool TryGetNearestUnblockedIndex(int startIdx, int radius, out int foundIdx)
         {
-            MapData data = _data;
+            MapData data = m_data;
             if (data == null) { foundIdx = -1; return false; }
             if (!data.IsValidCellIndex(startIdx)) { foundIdx = -1; return false; }
             if (!data.IsBlocked[startIdx]) { foundIdx = startIdx; return true; }
@@ -178,7 +180,7 @@ namespace AI_Workshop03.AI
         /// </summary>
         public Vector3 ComputeObstacleAvoidance(Vector3 pos, Vector3 desiredDirNorm, float lookAheadDist, float sideOffsetDist, float agentPlaneOffsetY)
         {
-            if (_data == null) return Vector3.zero;
+            if (m_data == null) return Vector3.zero;
             if (desiredDirNorm.sqrMagnitude < 1e-6f) return Vector3.zero;
 
             Vector3 forward = new Vector3(desiredDirNorm.x, 0f, desiredDirNorm.z);
