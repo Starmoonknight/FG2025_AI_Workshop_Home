@@ -12,34 +12,34 @@ namespace AI_Workshop03.AI
     {
 
         [Header("References")]
-        [SerializeField] private NavigationServiceManager _navigationService;
+        [SerializeField] private NavigationServiceManager m_navigationService;
 
         [Header("Optional: debug visuals per request")]
-        [SerializeField] private bool _visualizeAll = false;
-        [SerializeField] private bool _showFinalPath = false;
-        [SerializeField] private bool _showStartAndGoal = false;
+        [SerializeField] private bool m_visualizeAll = false;
+        [SerializeField] private bool m_showFinalPath = false;
+        [SerializeField] private bool m_showStartAndGoal = false;
 
-        private AgentMapSense _mapSense;
-        private AgentPathBuffer _pathBuffer;
+        private AgentMapSense m_mapSense;
+        private AgentPathBuffer m_pathBuffer;
                 
         // maybe a dictionary? to keep track if "this" request got denied / accepted. Probably overdoing it for no real gain
-        private int _requestId;     // stale callback guard if you spam requests.
-        private bool _pathRequestAccepted = false; 
+        private int m_requestId;     // stale callback guard if you spam requests.
+        private bool m_pathRequestAccepted = false; 
 
-        public NavigationServiceManager NavigationService => _navigationService;
-        public bool IsRequestInFlight => _navigationService != null && _navigationService.IsPathComputing;
-        public bool PathAccepted => _pathRequestAccepted;
+        public NavigationServiceManager NavigationService => m_navigationService;
+        public bool IsRequestInFlight => m_navigationService != null && m_navigationService.IsPathComputing;
+        public bool PathAccepted => m_pathRequestAccepted;
 
 
         // a setter for spawner injection
-        public void SetNavigationService(NavigationServiceManager svc) => _navigationService = svc;
+        public void SetNavigationService(NavigationServiceManager svc) => m_navigationService = svc;
 
 
 
         private void Awake()
         {
-            _mapSense = GetComponent<AgentMapSense>();
-            _pathBuffer = GetComponent<AgentPathBuffer>();
+            m_mapSense = GetComponent<AgentMapSense>();
+            m_pathBuffer = GetComponent<AgentPathBuffer>();
 
             // NOTE: The spawner is currently handling this
             //if (_navigationService == null) _navigationService = FindFirstObjectByType<NavigationServiceManager>();
@@ -56,15 +56,15 @@ namespace AI_Workshop03.AI
 
             // --- called by manager when leader needs a new path ---
 
-            if (_mapSense == null) return false;
+            if (m_mapSense == null) return false;
             
-            if (!_mapSense.TryGetValidStartIndexFromCurrentPos( out int startIdx)) 
+            if (!m_mapSense.TryGetValidStartIndexFromCurrentPos( out int startIdx)) 
                 return false;   // agent standing in invalid/blocked cell
 
-            if (!_mapSense.TryWorldToIndex(worldGoal, out int goalIdx)) 
+            if (!m_mapSense.TryWorldToIndex(worldGoal, out int goalIdx)) 
                 return false;   // world position not on grid
 
-            if (!_mapSense.IsWalkableIndex(startIdx) || !_mapSense.IsWalkableIndex(goalIdx))
+            if (!m_mapSense.IsWalkableIndex(startIdx) || !m_mapSense.IsWalkableIndex(goalIdx))
                 return false;   // make sure requested cells are walkable 
 
             return RequestPathIndices(startIdx, goalIdx);
@@ -76,19 +76,19 @@ namespace AI_Workshop03.AI
         /// </summary>
         public bool RequestPathIndices(int startIdx, int goalIdx)
         {
-            _pathRequestAccepted = false;
+            m_pathRequestAccepted = false;
 
-            var data = _mapSense.Data;
+            var data = m_mapSense.Data;
             if (data == null) return false;
 
             // validate walkability of start/goal cell 
-            if (!_mapSense.IsWalkableIndex(startIdx)) return false;
-            if (!_mapSense.IsWalkableIndex(goalIdx)) return false;
+            if (!m_mapSense.IsWalkableIndex(startIdx)) return false;
+            if (!m_mapSense.IsWalkableIndex(goalIdx)) return false;
 
-            if (_navigationService == null) return false;
+            if (m_navigationService == null) return false;
 
             // reachability pre-check, if Start <-!/!-> Goal has no chance of being reachable       (fast “don’t even try A* if disconnected”)
-            if (_navigationService != null && !_navigationService.TryValidateReachablePair(startIdx, goalIdx))
+            if (m_navigationService != null && !m_navigationService.TryValidateReachablePair(startIdx, goalIdx))
                 return false;
 
 
@@ -102,32 +102,42 @@ namespace AI_Workshop03.AI
             //          WARNING: CURRENT SOLUTION WILL INTERUPT ANY AND ALL PATHS!
             //
             // Simple temp solution for Lab: cancel old computation and start new.
-            if (_navigationService.IsPathComputing)
-                _navigationService.CancelPath(clearVisuals: false);
+            if (m_navigationService.IsPathComputing)
+                m_navigationService.CancelPath(clearVisuals: false);
 
-            _pathBuffer.Clear();        // data ownership belongs in buffer
+            m_pathBuffer.Clear();        // data ownership belongs in buffer
 
-            int myReq = ++_requestId;
+            int myReq = ++m_requestId;
 
-            _navigationService.RequestTravelPath(
+            m_navigationService.RequestTravelPath(
                 startIdx,
                 goalIdx,
-                path => OnPathFound(myReq, path, startIdx, goalIdx, myReq),
-                _visualizeAll,
-                _showFinalPath,
-                _showStartAndGoal
+                path => OnPathFound(myReq, path, startIdx, goalIdx),
+                m_visualizeAll,
+                m_showFinalPath,
+                m_showStartAndGoal
             );
 
-            _pathRequestAccepted = true;
+            m_pathRequestAccepted = true;
             return true;
         }
 
 
-        private void OnPathFound(int requestId, List<int> path, int startIdx, int goalIdx, int pathReqId)
-        {
-            if (requestId != _requestId) return;    // stale callback guard
 
-            _pathBuffer.SetPath(path, startIdx, goalIdx, pathReqId);  // store path data in buffer
+
+        // private void OnPathFound(int requestId, List<int> path, int startIdx, int goalIdx, int pathReqId)
+        // dont remember where I left of, myReq was used for both ID and think the idea was to later introduce two-part ID system: 
+        // - a service-side job id (queue slot, worker id)
+        // - a path version id independent of request spam
+        //
+        // but nothing at current stage reflects that so guess I will remember what the idea was later.. 
+
+
+        private void OnPathFound(int pathReqId, List<int> path, int startIdx, int goalIdx)
+        {
+            if (pathReqId != m_requestId) return;    // stale callback guard
+
+            m_pathBuffer.SetPath(path, startIdx, goalIdx, pathReqId);  // store path data in buffer
 
 
 
@@ -137,14 +147,8 @@ namespace AI_Workshop03.AI
 
         public void ClearPath()
         {
-            _pathBuffer.Clear();
+            m_pathBuffer.Clear();
         }
-
-
-
-
-
-
 
 
 

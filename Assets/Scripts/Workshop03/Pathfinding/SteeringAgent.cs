@@ -112,6 +112,10 @@ namespace AI_Workshop03
 
         public void StartNewRandomPath()
         {
+            // Quick fix for now but need to look at the propper returns later. For when the agen is disabled but im a scene, casued problems from the map input call. 
+            if (_data == null) return;
+            if (_mapManager == null || _navigationService == null) return;
+
             // Random start + random reachable goal
             if (!EnsureCanRequestPath()) return;
 

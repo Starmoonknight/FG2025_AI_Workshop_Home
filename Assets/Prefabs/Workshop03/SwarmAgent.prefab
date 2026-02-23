@@ -14,8 +14,8 @@ GameObject:
   - component: {fileID: 1238538270662584919}
   - component: {fileID: 6005593210462088849}
   - component: {fileID: 5031422391020874124}
-  - component: {fileID: 8271197311262272608}
   - component: {fileID: 4519865471394796635}
+  - component: {fileID: 8271197311262272608}
   - component: {fileID: 2858196979129833558}
   - component: {fileID: 5040006321807410614}
   - component: {fileID: 3794004741766748977}
@@ -74,7 +74,7 @@ MeshRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 2100000, guid: 31321ba15b8f8eb4c954353edc038b1d, type: 2}
+  - {fileID: 2100000, guid: c3016ec4596a2a345b2a4f3a2cf7bd1b, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -133,7 +133,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ac300cdfaa4b57146a4d55082d87131b, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AI_Workshop03.AI.AgentMapSense
-  _mapManager: {fileID: 0}
+  m_mapManager: {fileID: 0}
 --- !u!114 &5031422391020874124
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -146,33 +146,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 06a7c6355cea392468fcacb941672696, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AI_Workshop03.AI.AgentPathRequester
-  _navigationService: {fileID: 0}
-  _visualizeAll: 1
-  _showFinalPath: 1
-  _showStartAndGoal: 1
---- !u!114 &8271197311262272608
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1668245068365282562}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 29542850f8c822f49ae9b652011d344d, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::AI_Workshop03.AI.AgentBrain
-  _engageRange: 9
-  _disengageRange: 12
-  _repathInterval: 0.5
-  _alertedDuration: 2.5
-  _patrolPickAttempts: 64
-  _blockedLookAhead: 0.9
-  _enableBlockedRepath: 1
-  _patrolMinManhattanFactor: 0.3
-  _patrolMinManhattanClampMin: 2
-  _patrolMinManhattanClampMax: 200
-  _logStateChanges: 1
+  m_navigationService: {fileID: 0}
+  m_visualizeAll: 0
+  m_showFinalPath: 0
+  m_showStartAndGoal: 0
 --- !u!114 &4519865471394796635
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -185,23 +162,56 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 09be9f4bd9630e640af2949bb5ecd698, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AI_Workshop03.AI.SwarmingAgent
-  _agentPlaneOffsetY: 0.5
-  _isLeader: 0
-  _leader: {fileID: 0}
-  _target: {fileID: 0}
-  _maxSpeed: 6
-  _maxAccel: 20
-  _waypointRadius: 0.3
-  _slowingRadius: 2
-  _neighborRadius: 2.5
-  _separationRadius: 1.1
-  _separationWeight: 1.4
-  _cohesionWeight: 0.6
-  _alignmentWeight: 0.5
-  _followLeaderWeight: 1
-  _lookAhead: 0.9
-  _sideOffset: 0.5
-  _avoidWeight: 2
+  m_agentPlaneOffsetY: 0.5
+  m_isLeader: 0
+  m_leader: {fileID: 0}
+  m_target: {fileID: 0}
+  m_maxSpeed: 3
+  m_maxAccel: 20
+  m_testFollowMode: 0
+  m_lookAhead: 0.9
+  m_sideOffset: 0.5
+  m_avoidWeight: 2
+  m_waypointRadius: 0.5
+  m_slowingRadius: 1.1
+  m_strictFollow01: 0.4
+  m_leaderLookAheadCells: 0.6
+  m_leaderLookAheadSpeed: 0.15
+  m_lateralDamp: 6
+  m_neighborRadius: 2.5
+  m_separationRadius: 1.1
+  m_leaderFollowDist: 1.5
+  m_exploreRadiusCells: 2
+  m_followDistanceCells: 2
+  m_bandMinCells: 1.5
+  m_bandMaxCells: 6
+  m_separationWeight: 1.4
+  m_cohesionWeight: 0.6
+  m_alignmentWeight: 0.5
+  m_followLeaderWeight: 1
+--- !u!114 &8271197311262272608
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1668245068365282562}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 29542850f8c822f49ae9b652011d344d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::AI_Workshop03.AI.AgentBrain
+  m_engageRange: 6
+  m_disengageRange: 9
+  m_repathInterval: 0.5
+  m_alertedDuration: 2.5
+  m_patrolPickAttempts: 64
+  m_blockedLookAhead: 0.9
+  m_enableBlockedRepath: 1
+  m_patrolMinManhattanFactor: 0.3
+  m_patrolMinManhattanClampMin: 2
+  m_patrolMinManhattanClampMax: 200
+  m_logStateChanges: 0
 --- !u!114 &2858196979129833558
 MonoBehaviour:
   m_ObjectHideFlags: 0
