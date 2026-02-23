@@ -15,6 +15,14 @@ namespace AI_Workshop03.AI
         STATE_SwarmingFollow
     }
 
+    public enum RoughTestFollowMode
+    {
+        FollowPoint,
+        Crowd,
+        LeaderTail,
+        Anchor
+    }
+
     // SwarmingAgent combines:
     // - Global navigation (A* path) for leaders: PathBuffer = list of grid cell waypoints.
     // - Local steering (boids) for followers: Separation + Cohesion + Alignment + FollowLeader.
@@ -44,6 +52,7 @@ namespace AI_Workshop03.AI
         [Header("Movement")]
         [SerializeField] private float m_maxSpeed = 4f;      // max speed this unit can reach 
         [SerializeField] private float m_maxAccel = 20f;     // max change in velocity per second (turning + speeding up + braking)
+        [SerializeField] private RoughTestFollowMode m_testFollowMode = RoughTestFollowMode.FollowPoint;
 
         [Header("Obstacle Avoidance")]
         [SerializeField] private float m_lookAhead = 0.9f;
@@ -64,13 +73,11 @@ namespace AI_Workshop03.AI
         [SerializeField] private float m_neighborRadius = 2.5f;
         [SerializeField] private float m_separationRadius = 1.1f;
         [SerializeField] private float m_leaderFollowDist = 1.0f;       // Cells behind the leader. On a 1-unit cell grid, 1.0 ends up being crowding on top of leader (2-4 good?)
-
-        // NEW: Not Implemented
+        //[SerializeField] private float m_leaderSeparationBoost = 2.5f;  // stronger separation from leader            NOT IMPLEMENTED YET
         [SerializeField] private float m_exploreRadiusCells = 2.0f;     // how far they wander around anchor point
         [SerializeField] private float m_followDistanceCells = 2.0f;    // anchor distance behind lead
         [SerializeField] private float m_bandMinCells = 1.5f;           // inside this: no pull (free roam)
         [SerializeField] private float m_bandMaxCells = 6.0f;           // outside this: full pull (rubber band)
-        [SerializeField] private float m_leaderSeparationBoost = 2.5f;  // stronger separation from leader
 
 
         [Header("Flocking: Weights")]
@@ -83,7 +90,8 @@ namespace AI_Workshop03.AI
         private AgentMapSense m_mapSense;
         private AgentPathBuffer m_pathBuffer;
 
-        private static readonly int ColorId = Shader.PropertyToID("_Color");
+        private static readonly int ColorId = Shader.PropertyToID("_BaseColor"); // URP Lit
+        private static readonly int ColorIdFallback = Shader.PropertyToID("_Color");
         private MaterialPropertyBlock m_mpb;
         private Renderer m_renderer;
 
@@ -92,14 +100,15 @@ namespace AI_Workshop03.AI
         private int m_lastSlideAxis; // -1 = Z, +1 = X, 0 = none
 
         private Vector3 m_wanderOffset;  // curiosity 
-        private float m_wanderNextTime;  // curiosity timer 
-
+        private float m_wanderNextTime;  // curiosity timer / personality knob: how often agents pick a new exploration direction
 
 
         public SwarmState State { get; private set; } = SwarmState.STATE_SwarmingFollow;
-        public bool IsLeader => m_isLeader;
         public SwarmingAgent Leader => m_leader;
         public Transform Target => m_target;
+        public bool IsLeader => m_isLeader;
+        public Vector3 Velocity => m_velocity;
+
 
 
         public void SetState(SwarmState state) => State = state;
@@ -182,8 +191,17 @@ namespace AI_Workshop03.AI
 
         public void SetColor(Color32 color)
         {
+            if (m_renderer == null) m_renderer = GetComponentInChildren<Renderer>(true);
+            if (m_mpb == null) m_mpb = new MaterialPropertyBlock();
+
             m_renderer.GetPropertyBlock(m_mpb);
-            m_mpb.SetColor(ColorId, color);
+
+            var mat = m_renderer.sharedMaterial;
+            if (mat != null && mat.HasProperty(ColorId))
+                m_mpb.SetColor(ColorId, color);
+            else
+                m_mpb.SetColor(ColorIdFallback, color);
+
             m_renderer.SetPropertyBlock(m_mpb);
         }
 
@@ -544,56 +562,63 @@ namespace AI_Workshop03.AI
             // follow their leader if they have one
             if (m_leader != null)
             {
-                Vector3 toLeader = (m_leader.transform.position - transform.position);
+                Vector3 myPos = transform.position; myPos.y = 0f;
+                Vector3 leaderPos = m_leader.transform.position; leaderPos.y = 0f;
 
-                // This made the boid collapse into a crowd like aura, or like pond scum. But could be fun to implement as a mode later   
-                //follow = SeekTo(toLeader) * m_followLeaderWeight;
+                // Vector from follower -> leader (planar)
+                Vector3 dirToLeader = leaderPos - myPos;        // REMEMBER: this is a direction vector, not a world position!
 
+                //Vector3 dirToLeaderNorm = dirToLeader.normalized;     // removed them until implemented banding / rejoin logic.
+                //float distToLeader = dirToLeader.magnitude;           // removed them until implemented banding / rejoin logic.
 
-                // If I want the crowd aura, just keep the above line 
-                // This way it makes sure leader is distinct, and followers follow behind propperly. Added all lines of code below to fix problem.
-                Vector3 leaderDir = m_leader.transform.forward; // or use leader velocity if you expose it
-                float followDist = m_leaderFollowDist * mapData.CellTileSize;
-                Vector3 followPoint = m_leader.transform.position - leaderDir * followDist;
+                // Leader forward (planar)
+                Vector3 leaderFaceDir = m_leader.transform.forward; 
+                leaderFaceDir.y = 0f;
 
-                follow = ArriveWorld(followPoint, slowRadius: followDist) * m_followLeaderWeight;
+                // Leader velocity (planar)
+                Vector3 velDir = m_leader.Velocity;             //Vector3 leaderVel = m_leader.m_velocity;  // WAIT WHAT! I can acces a private field of another instance of the same class? 
+                velDir.y = 0f;
 
+                // Choose one heading   (prefer velocity if moving, else faceing dir, else .forward as a fallback)
+                Vector3 leaderHeading = Vector3.forward;
 
-                // Third design option, need to try what feels best or make a hotswap method.
-                // Follow a moving anchor region.
-                // Instead of seeking the leader, seek an anchor point behind the leader and let cohesion/alignment keep them together.
-                /*
-                Vector3 leaderDir = m_leader.VelocityXZ.sqrMagnitude > 0.01f
-                    ? m_leader.VelocityXZ.normalized
-                    : m_leader.transform.forward;
-
-                float followDist = m_followDistanceCells * mapData.CellTileSize; // e.g. 2–4 cells
-                Vector3 anchor = m_leader.transform.position - leaderDir * followDist;
-
-                // Arrive to the anchor, not the leader.
-                follow = ArriveWorld(anchor, slowRadius: followDist) * m_followLeaderWeight;
-                */
-
-
-
-                // Wander offset 
-                /*
-                // NEW, needs more testing
-                // Curiosity, let them wander around a bit
-                if (Time.time >= m_wanderNextTime)
+                if (velDir.sqrMagnitude > 1e-4f)
                 {
-                    Vector2 r = Random.insideUnitCircle.normalized;
-                    m_wanderOffset = new Vector3(r.x, 0f, r.y);
-                    m_wanderNextTime = Time.time + Random.Range(0.6f, 1.4f);
+                    leaderHeading = velDir.normalized;
+                }
+                else if (leaderFaceDir.sqrMagnitude > 1e-4f)
+                {
+                    leaderHeading = leaderFaceDir.normalized;
                 }
 
-                float exploreRadius = m_exploreRadiusCells * mapData.CellTileSize; // e.g. 2–5 cells
-                Vector3 exploreTarget = anchor + m_wanderOffset * exploreRadius;
+
+                // --- TEMPORARY TESTING: different follow modes to test different ways of following the leader, before implementing banding/rejoin logic ---
+
+                switch (m_testFollowMode)
+                {
+                    case RoughTestFollowMode.FollowPoint:
+                        follow = FollowModeFollowPoint(leaderPos, leaderHeading, mapData);
+                        break;
+                    case RoughTestFollowMode.Crowd:
+                        follow = FollowModeCrowd(dirToLeader);
+                        break;
+                    case RoughTestFollowMode.LeaderTail:
+                        follow = FollowModeLeaderTail(leaderPos, leaderHeading, mapData);
+                        break;
+                    case RoughTestFollowMode.Anchor:
+                        follow = FollowModeAnchor(leaderPos, leaderHeading, mapData);
+                        break;
+                }
 
 
-                Vector3 follow = ArriveWorld(exploreTarget, slowRadius: exploreRadius) * m_followLeaderWeight;
-                */
 
+
+                //follow = FollowModeFollowPoint(leaderPos, leaderHeading, mapData);
+
+                // later swap:
+                // follow = FollowModeCrowd(dirToLeader);
+                // follow = FollowModeLeaderTail(leaderPos, leaderHeading, mapData);
+                // follow = FollowModeAnchor(leaderPos, leaderHeading, mapData);
 
             }
 
@@ -609,6 +634,120 @@ namespace AI_Workshop03.AI
             // decide final movement for this unit 
             return desired + avoid;
         }
+
+
+        // Use when alerted? To showcase different reactions to being disturbed, more like an organism
+        // Crowd / Pond Scum
+        private Vector3 FollowModeCrowd(Vector3 dirToLeader)
+        {
+            // This made the boid collapse into a crowd like aura, or like pond scum. But could be fun to implement as a mode later   
+            Vector3 follow = SeekTo(dirToLeader) * m_followLeaderWeight;   
+            return follow;
+        }
+
+        // Follow the leader directly, like a tail.
+        // Can cause crowding on top of leader if followDist is too small, but might look more natural if they are trying to follow closely.
+        private Vector3 FollowModeLeaderTail(Vector3 leaderPos, Vector3 leaderHeading, MapData mapData)
+        {
+            float cell = mapData.CellTileSize;
+
+            // Desired spacing behind leader (in world units)
+            float tailDist = m_leaderFollowDist * cell; // set m_leaderFollowDist to 2–4 for clear tail feel when in this mode 
+
+            // Target point behind leader
+            Vector3 tailPoint = leaderPos - leaderHeading * tailDist;
+            tailPoint.y = m_agentPlaneOffsetY;
+
+            // Banding: no pull if already close, full pull if far
+            Vector3 toTail = tailPoint - transform.position;
+            toTail.y = 0f;
+
+            float dist = toTail.magnitude;
+            float bandMin = m_bandMinCells * cell;
+            float bandMax = m_bandMaxCells * cell;
+
+            float followScale = 0f;
+            if (dist > bandMin)
+                followScale = Mathf.InverseLerp(bandMin, bandMax, dist); // 0..1
+
+            // Modify arrive so agent doesn't overshoot and orbit
+            float slowRadius = Mathf.Max(tailDist, 1.5f * cell);
+
+            Vector3 follow = ArriveWorld(tailPoint, slowRadius) * (m_followLeaderWeight * followScale);
+            return follow; 
+        }
+
+        private Vector3 FollowModeFollowPoint(Vector3 leaderPos, Vector3 leaderHeading, MapData mapData)
+        {
+            // Follow a point a fixed distance behind the leader. This way it makes sure leader is distinct, and followers follow behind propperly. 
+            float followDist = m_leaderFollowDist * mapData.CellTileSize; // e.g. 2–4 cells
+            Vector3 followPoint = leaderPos - leaderHeading * followDist;
+
+            Vector3 follow = ArriveWorld(followPoint, slowRadius: followDist) * m_followLeaderWeight;
+            return follow; 
+        }
+
+        // Follow a moving anchor region.
+        // Instead of seeking the leader, seek an anchor point behind the leader and let cohesion/alignment keep them together.
+        private Vector3 FollowModeAnchor(Vector3 leaderPos, Vector3 leaderHeading, MapData mapData)
+        {
+            float cell = mapData.CellTileSize;
+
+            float anchorDist = m_followDistanceCells * mapData.CellTileSize; // e.g. 2–4 cells
+            Vector3 anchor = leaderPos - leaderHeading * anchorDist;
+            anchor.y = m_agentPlaneOffsetY;
+
+
+            // --- Wander/explore around anchor (low frequency changes = personality) ---
+            Vector3 exploreTarget = WanderCuriosExplorer(cell, anchor, out float exploreRadius);
+
+
+            // --- Rubber band effect: stronger pull the farther they are, but no pull inside a certain radius to allow free roaming and prevent jitter when close --- 
+            Vector3 toAnchor = anchor - transform.position;
+            toAnchor.y = 0f;
+            float dist = toAnchor.magnitude;
+
+            float bandMin = m_bandMinCells * cell;
+            float bandMax = m_bandMaxCells * cell;
+
+            float followScale = 0f;
+            if (dist > bandMin)
+                followScale = Mathf.InverseLerp(bandMin, bandMax, dist); // 0..1
+
+
+            // --- Arrive to the anchor, not the leader, scaled by banding ---
+            //Vector3 follow = ArriveWorld(anchor, slowRadius: anchorDist) * m_followLeaderWeight;
+            Vector3 follow = ArriveWorld(exploreTarget, slowRadius: exploreRadius) * (m_followLeaderWeight * followScale);
+            return follow;
+        }
+
+        // make another extra method except only FollowModeAnchor() call on this to give random area for agent to walk if no leader, or away from leader too long? 
+        private Vector3 WanderCuriosExplorer(float cell, Vector3 anchor, out float exploreRadius)
+        {
+            // NEW, needs more testing
+
+            // Wander offset / Curiosity, let them wander around a bit
+            if (Time.time >= m_wanderNextTime)
+            {
+                Vector2 r = Random.insideUnitCircle;
+                if (r.sqrMagnitude < 1e-6f) r = Vector2.right;
+
+                r.Normalize();
+                m_wanderOffset = new Vector3(r.x, 0f, r.y);
+
+                // Personality knob: how often agents pick a new exploration direction
+                m_wanderNextTime = Time.time + Random.Range(0.6f, 1.4f);
+            }
+
+            exploreRadius = m_exploreRadiusCells * cell; // e.g. 2–5 cells
+            Vector3 exploreTarget = anchor + m_wanderOffset * exploreRadius;
+            exploreTarget.y = m_agentPlaneOffsetY;
+
+            return exploreTarget; 
+        }
+
+
+
 
 
         // flock steering, boids-ish style. One neighbor scan, then 3 small rule methods. 
@@ -650,6 +789,17 @@ namespace AI_Workshop03.AI
                 // separation only applies inside the smaller separation radius
                 if (distSqr < separationRadSqr && distSqr > 1e-6f)
                     separationSum -= distanceToNeighbour / distSqr;    // stronger seperation force when closer grouped, repel hard if extremely close 
+
+                // NOTE: Switch above line to below if I want stronger separation from leader 
+                /*
+                if (distSqr < separationRadSqr && distSqr > 1e-6f)
+                {
+                    float boost = (other == m_leader) ? m_leaderSeparationBoost : 1f;
+                    separationSum -= (distanceToNeighbour / distSqr) * boost;
+                }
+                */
+
+
             }
 
             if (neighborCount == 0) return Vector3.zero;

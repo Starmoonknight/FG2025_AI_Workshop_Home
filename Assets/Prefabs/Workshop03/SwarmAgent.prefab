@@ -74,7 +74,7 @@ MeshRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 2100000, guid: e613050563c64234a8a25ac6ac5428f8, type: 2}
+  - {fileID: 2100000, guid: c3016ec4596a2a345b2a4f3a2cf7bd1b, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -133,7 +133,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ac300cdfaa4b57146a4d55082d87131b, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AI_Workshop03.AI.AgentMapSense
-  _mapManager: {fileID: 0}
+  m_mapManager: {fileID: 0}
 --- !u!114 &5031422391020874124
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -146,10 +146,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 06a7c6355cea392468fcacb941672696, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AI_Workshop03.AI.AgentPathRequester
-  _navigationService: {fileID: 0}
-  _visualizeAll: 1
-  _showFinalPath: 1
-  _showStartAndGoal: 1
+  m_navigationService: {fileID: 0}
+  m_visualizeAll: 0
+  m_showFinalPath: 0
+  m_showStartAndGoal: 0
 --- !u!114 &4519865471394796635
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -168,6 +168,7 @@ MonoBehaviour:
   m_target: {fileID: 0}
   m_maxSpeed: 3
   m_maxAccel: 20
+  m_testFollowMode: 0
   m_lookAhead: 0.9
   m_sideOffset: 0.5
   m_avoidWeight: 2
@@ -180,6 +181,10 @@ MonoBehaviour:
   m_neighborRadius: 2.5
   m_separationRadius: 1.1
   m_leaderFollowDist: 1.5
+  m_exploreRadiusCells: 2
+  m_followDistanceCells: 2
+  m_bandMinCells: 1.5
+  m_bandMaxCells: 6
   m_separationWeight: 1.4
   m_cohesionWeight: 0.6
   m_alignmentWeight: 0.5
@@ -196,17 +201,17 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 29542850f8c822f49ae9b652011d344d, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AI_Workshop03.AI.AgentBrain
-  _engageRange: 9
-  _disengageRange: 12
-  _repathInterval: 0.5
-  _alertedDuration: 2.5
-  _patrolPickAttempts: 64
-  _blockedLookAhead: 0.9
-  _enableBlockedRepath: 1
-  _patrolMinManhattanFactor: 0.3
-  _patrolMinManhattanClampMin: 2
-  _patrolMinManhattanClampMax: 200
-  _logStateChanges: 1
+  m_engageRange: 6
+  m_disengageRange: 9
+  m_repathInterval: 0.5
+  m_alertedDuration: 2.5
+  m_patrolPickAttempts: 64
+  m_blockedLookAhead: 0.9
+  m_enableBlockedRepath: 1
+  m_patrolMinManhattanFactor: 0.3
+  m_patrolMinManhattanClampMin: 2
+  m_patrolMinManhattanClampMax: 200
+  m_logStateChanges: 0
 --- !u!114 &2858196979129833558
 MonoBehaviour:
   m_ObjectHideFlags: 0
