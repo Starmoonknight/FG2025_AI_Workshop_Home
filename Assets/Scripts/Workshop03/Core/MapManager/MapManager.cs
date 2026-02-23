@@ -1,3 +1,4 @@
+using NUnit.Framework.Constraints;
 using System;
 using System.Collections;
 using UnityEngine;
@@ -71,6 +72,8 @@ namespace AI_Workshop03
 
         private MapData m_data;
         private MapReachability m_reachability;
+        private MapGenDebugReporter _mapGenReporter;
+        private Coroutine _visualsReadyCoroutine;
 
         private readonly MapGenerator m_generator = new MapGenerator();
         private int m_mapBuildId = 0;
@@ -135,28 +138,29 @@ namespace AI_Workshop03
 
             m_reachability = new MapReachability();
 
-            GenerateNewGameBoard();
-
             // Used to fix texture being mirrored and not lining up with coord system map truth 
             //DebugCornerColorTest(); 
         }
 
 
+        private void Start()
+        {
+
+            GenerateNewGameBoard();
+            
+        }
 
 
 
         public void GenerateNewGameBoard()
         {
-            if (_boardRenderer == null) { Debug.LogError("Board Renderer missing, impossible to make map!"); return; }
+            if (_boardRenderer == null) 
+            { 
+                Debug.LogError("Board Renderer missing, impossible to make map!"); 
+                return; 
+            }
 
             ValidateGridSize();
-
-            // Initialize or Resize: Ensure MapData instance exists and matches size
-            if (m_data == null)
-                m_data = new MapData(_width, _height);
-            else
-                m_data.Resize(_width, _height);
-
 
             // Generate seeds
             int baseSeed = (_seed != 0) ? _seed : Environment.TickCount;    // if seed is 0 use random seed
@@ -165,23 +169,20 @@ namespace AI_Workshop03
 
             // Store last used seed for reference
             _lastGeneratedSeed = baseSeed;
-            LogGenerationSeed(baseSeed, genSeed, orderSeed);
             UpdateSeedHud();
 
-            // Resize MapData to match current width/height for a fresh generation, and configure base terrain (walkable land, cost 10   /or whatever _baseTerrainCost is) in the data arrays
-            m_data.Resize(_width, _height);
-            m_data.ConfigureBase((byte)TerrainID.Land, _baseTerrainCost, _walkableColor);
-
-            /*
-            // Reset truth arrays to base state for a fresh generation   (walkable land, cost 10    /or whatever _baseTerrainCost is)
-            m_data.InitializeToBase(
+            _mapGenReporter = CreateReporter();
+            _mapGenReporter.BeginRun(
+                seed: baseSeed,
+                genSeed: genSeed,
+                orderSeed: orderSeed,
                 width: _width,
                 height: _height,
-                baseTerrainKind: (byte)TerrainID.Land,
-                baseTerrainCost: _baseTerrainCost,
-                baseTerrainColor: _walkableColor
+                terrainCount: _terrainData?.Length ?? 0
             );
-            */
+
+            Exception runEx = null;
+            bool runSuccess = false;
 
 
             // TODO (architecture): Generator debug flags are currently driven by MapManager for convenience.
@@ -190,86 +191,128 @@ namespace AI_Workshop03
             // small debug settings object/config into Generate() instead.
 
             // Setup the Debug
+
+
+            try 
+            {
+                        /*
+                        // Reset truth arrays to base state for a fresh generation   (walkable land, cost 10    /or whatever _baseTerrainCost is)
+                        m_data.InitializeToBase(
+                            width: _width,
+                            height: _height,
+                            baseTerrainKind: (byte)TerrainID.Land,
+                            baseTerrainCost: _baseTerrainCost,
+                            baseTerrainColor: _walkableColor
+                        );
+                        */
+
+                // Initialize or Resize: Ensure MapData instance exists and matches size for a fresh generation
+                if (m_data == null) m_data = new MapData(_width, _height);
+                else m_data.Resize(_width, _height);
+
+                // Base truth       - configure base terrain (walkable land, cost 10    /or whatever _baseTerrainCost is) in the data arrays
+                m_data.ConfigureBase((byte)TerrainID.Land, _baseTerrainCost, _walkableColor);
+                
+
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
-            m_generator.Debug_DumpFocusWeights = _dumpFocusWeights;
-            m_generator.Debug_DumpFocusWeightsVerbose = _dumpFocusWeightsVerbose;
+                m_generator.Debug_DumpFocusWeights = _dumpFocusWeights;
+                m_generator.Debug_DumpFocusWeightsVerbose = _dumpFocusWeightsVerbose;
 #else
-            m_generator.Debug_DumpFocusWeights = false;
-            m_generator.Debug_DumpFocusWeightsVerbose = false;
+                m_generator.Debug_DumpFocusWeights = false;
+                m_generator.Debug_DumpFocusWeightsVerbose = false;
 #endif
 
-
-            // Call the BoardGenerator to generate the map by running terrain generation into the existing MapData arrays (single source of truth)
-            m_generator.Generate(
-                m_data,
-                genSeed,                            // Generation seed (0 = random). Controls placement randomness.
-                orderSeed,                          // Terrain order seed (rarity/layer shuffle). Controls order of terrain rules.
-                _terrainData,                       // Terrain rule list (ScriptableObject data). Each entry may paint/overwrite cells.
-                _maxGenerateAttempts,               // Safety cap: max full generation retries before giving up (avoid infinite loops).
-                _minUnblockedPercent,               // Required % of cells that must remain walkable (limits obstacle terrain budget). 
-                _minReachablePercent,               // Required % of walkable cells that must be connected (flood-fill from start).
-                _allowDiagonalTraversal,            // Should diagonal tiles be included when determening map reachability potential 
-                m_reachability                       // Connectivity evaluator: returns reachable walkable cell count from a start index.
-            );
+                // NOTE: Later when MapGenerator supports it:
+                // m_generator.SetReporter(_mapGenReporter);
 
 
-            RecomputeMinTerrainCost();  // after terrain costs are set compute minimum traversal cost possible on this map
-
-            // Board placement in world space
-            float worldW = m_data.Width * m_cellTileSize;
-            float worldH = m_data.Height * m_cellTileSize;
-
-            // Scale plane to match grid world size, X = width, Z = height  (Unity Plane is 10x10 at scale 1)
-            _boardRenderer.transform.localScale = new Vector3(worldW / UNITY_PLANE_SIZE, 1f, worldH / UNITY_PLANE_SIZE);
-
-            // Center = world coords can run 0,0
-            _boardRenderer.transform.position = new Vector3(worldW * 0.5f, 0f, worldH * 0.5f);   // Center the plane, works in XZ plane
-            _boardRenderer.transform.rotation = Quaternion.identity;
-
-            // Increment how many maps have been built
-            m_mapBuildId++;
-
-            // Grid origin is bottom left corner in world space
-            Vector3 gridOrigin = _boardRenderer.transform.position - new Vector3(worldW * 0.5f, 0f, worldH * 0.5f);
-
-
-            // NOTE:  I wan't to add the coords for MinWorld MaxWorld to double check their position and the grids size,
-            //        might currently be placed on cell center / last index world-pos and not edge
-            //          cell centers (eg x=0.5..width-0.5), not the outer edges (0..width).
-
-            m_data.SetMapMeta(
-                buildId: m_mapBuildId,
-                mapGenSeed: baseSeed,
-                gridOriginWorld: gridOrigin,
-                cellTileSize: m_cellTileSize,
-                allowDiagonals: _allowDiagonalTraversal
+                // Call the BoardGenerator to generate the map by running terrain generation into the existing MapData arrays (single source of truth)
+                m_generator.Generate(
+                    m_data,
+                    genSeed,                            // Generation seed (0 = random).                Controls placement randomness.
+                    orderSeed,                          // Terrain order seed (rarity/layer shuffle).   Controls order of terrain rules.
+                    _terrainData,                       // Terrain rule list (ScriptableObject data).   Each entry may paint/overwrite cells.
+                    _maxGenerateAttempts,               // Safety cap: max full generation retries before giving up (avoid infinite loops).
+                    _minUnblockedPercent,               // Required % of cells that must remain walkable (limits obstacle terrain budget). 
+                    _minReachablePercent,               // Required % of walkable cells that must be connected (flood-fill from start).
+                    _allowDiagonalTraversal,            // Should diagonal tiles be included when determening map reachability potential 
+                    m_reachability                      // Connectivity evaluator: returns reachable walkable cell count from a start index.
                 );
 
 
-            // Notify listeners that map has been rebuilt
-            HandleMapRebuiltInternal(); 
+                RecomputeMinTerrainCost();  // after terrain costs are set compute minimum traversal cost possible on this map
 
+                // Board placement in world space
+                float worldW = m_data.Width * m_cellTileSize;
+                float worldH = m_data.Height * m_cellTileSize;
+
+                // Scale plane to match grid world size, X = width, Z = height  (Unity Plane is 10x10 at scale 1)
+                _boardRenderer.transform.localScale = new Vector3(worldW / UNITY_PLANE_SIZE, 1f, worldH / UNITY_PLANE_SIZE);
+
+                // Center = world coords can run 0,0
+                _boardRenderer.transform.position = new Vector3(worldW * 0.5f, 0f, worldH * 0.5f);   // Center the plane, works in XZ plane
+                _boardRenderer.transform.rotation = Quaternion.identity;
+
+                m_boardColliderCached = _boardRenderer.GetComponent<Collider>();
+
+                // Increment how many maps have been built
+                m_mapBuildId++;
+
+                // Grid origin is bottom left corner in world space
+                Vector3 gridOrigin = _boardRenderer.transform.position - new Vector3(worldW * 0.5f, 0f, worldH * 0.5f);
+
+
+                // NOTE:  I wan't to add the coords for MinWorld MaxWorld to double check their position and the grids size,
+                //        might currently be placed on cell center / last index world-pos and not edge
+                //          cell centers (eg x=0.5..width-0.5), not the outer edges (0..width).
+
+                m_data.SetMapMeta(
+                    buildId: m_mapBuildId,
+                    mapGenSeed: baseSeed,
+                    gridOriginWorld: gridOrigin,
+                    cellTileSize: m_cellTileSize,
+                    allowDiagonals: _allowDiagonalTraversal
+                    );
+
+
+                // Notify listeners that map has been rebuilt
+                ReportLayoutTelemetry();
+                HandleMapRebuiltInternal();
+
+
+                runSuccess = true;
+
+            }
+            catch (Exception ex)
+            {
+                runEx = ex;
+                _mapGenReporter.RecordAnomaly($"GenerateNewGameBoard failed before completion. nextBuildId={m_mapBuildId + 1}");
+                throw;
+            }
+            finally
+            {
+                _mapGenReporter.EndRun(runSuccess, runEx);
+            }
         }
 
 
         // NEW
         private void HandleMapRebuiltInternal()
         {
-
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
-            Debug.Log($"MinWorld={m_data.MinWorld} MaxWorld={m_data.MaxWorld} CellSize={m_data.CellTileSize} W={m_data.Width} H={m_data.Height}");
-            Debug.Log($"Expected size (cells*cellSize): X={m_data.Width * m_data.CellTileSize} Z={m_data.Height * m_data.CellTileSize}");
-            Debug.Log($"Reported size: X={m_data.MaxWorld.x - m_data.MinWorld.x} Z={m_data.MaxWorld.z - m_data.MinWorld.z}");
-#endif
-
             FitCameraOrthoTopDown();
 
             // 1) Data is valid right now
             OnMapRebuiltDataReady?.Invoke(m_data);                        // Systems that only need data (pathfinding caches, reachability) subscribe to OnMapRebuiltDataReady
 
             // 2) Visuals will be valid after subscribers run + a frame passes. Only run the coroutine if someone is actually listening
+            if (_visualsReadyCoroutine != null)
+            {
+                StopCoroutine(_visualsReadyCoroutine);
+                _visualsReadyCoroutine = null;
+            }
+
             if (OnMapRebuiltVisualsReady != null)
-                StartCoroutine(InvokeVisualsReadyEndOfFrame());     // Systems that might compete with initial setup should subscribe to OnMapRebuiltVisualsReady
+                _visualsReadyCoroutine = StartCoroutine(InvokeVisualsReadyEndOfFrame());     // Systems that might compete with initial setup should subscribe to OnMapRebuiltVisualsReady
         }
 
         // NEW
@@ -277,6 +320,13 @@ namespace AI_Workshop03
         {
             yield return m_waitForEndOfFrame;
             OnMapRebuiltVisualsReady?.Invoke(m_data);
+            _visualsReadyCoroutine = null;
+        }
+
+        private void OnTraversalTruthMutated()
+        {
+            m_reachability?.InvalidateStamp();
+            RecomputeMinTerrainCost();
         }
 
 
@@ -315,6 +365,7 @@ namespace AI_Workshop03
         }
 
 
+       
         // Fit the main camera to show the whole board in orthographic top-down view
         private void FitCameraOrthoTopDown()
         {

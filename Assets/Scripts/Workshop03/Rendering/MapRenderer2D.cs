@@ -39,6 +39,8 @@ namespace AI_Workshop03
         private Collider BoardCollider => _mapManager != null ? _mapManager.BoardCollider : null;
 
         public Color BoardTint => _boardTint;
+        public bool FlipTextureX => _flipTextureX;
+        public bool FlipTextureY => _flipTextureY;
 
 
         #endregion
@@ -97,15 +99,19 @@ namespace AI_Workshop03
 
             EnsureBuffers();
             EnsureTexture();
-            ApplyTextureToRenderer(); 
+            //ApplyTextureToRenderer();     // EnsureTexture() allready calls  ApplyTextureToRenderer(); inside of it, so this line is redundant.
 
             AutoDetectTextureFlipFromUV();
             RebuildCellColorsFromBase();
             FlushTexture();
 
+
+            // No always-on Debug.Log here.
+            // Layout mismatch warnings should be owned by reporter/MapManager call-site.
+            /*
             if (TargetRenderer != null)
                 Debug.Log($"RendererPos={TargetRenderer.transform.position} GridCenter={_data.GridCenter}");
-
+            */
         }
 
         private void EnsureBuffers()

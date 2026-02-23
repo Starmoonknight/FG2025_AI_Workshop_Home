@@ -294,14 +294,13 @@ namespace AI_Workshop03
                 RunFallbackBranch(seed, terrainData, walkablesList, terrainDataId);
 
 
+            // Always publish final reachable stamp once (if possible)
+            if (mapReach != null && EnsureWalkableStartIndex(ref startIndex))
+                mapReach.BuildReachableFrom(data, startIndex, allowDiagonals);  // do one full BFS build on accepted map to mark reachable area for runtime use (doing multiple BFS checks during attempts can be costly on larger maps)
+
             if (Debug_DumpFocusWeights)
-            {
-                // debug + sanity check that things work like I expect them to, not meant to be used by anything 
-                if (mapReach != null && EnsureWalkableStartIndex(ref startIndex))
-                {
-                    mapReach.BuildReachableFrom(data, startIndex, allowDiagonals);  // do one full BFS build on accepted map to mark reachable area for runtime use (doing multiple BFS checks during attempts can be costly on larger maps)
-                }
-            }
+                DumpDebugIfEnabled(seed, terrainData, fallbackBuilds: _usedFallbackThisBuild ? 1 : 0);
+
         }
 
 
@@ -524,24 +523,9 @@ namespace AI_Workshop03
                 }
 
 
-                bool needsReachability = Mathf.Clamp01(minReachablePercent) > 0f;
-                if (mapReach == null)
-                {
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
-                    if (needsReachability)
-                        Debug.LogWarning("MapGenerator: mapReach is null but minReachablePercent > 0. Reachability check will be skipped and maps may be disconnected.");
-#endif
-                }
-
-
                 // --- Successful Generation Branch ---                         // The generated map fullfils base requirements, continue to finnishing touches 
                 FinalizeWalkableTerrains(walkablesList, terrainDataId);         // reset walkable tiles to base visuals/cost/id so terrain can build from clean base
                 stats.gate = FailGate.None; RecordAttempt(stats);
-
-                if (mapReach != null && EnsureWalkableStartIndex(ref startIndex))
-                {
-                    mapReach.BuildReachableFrom(data, startIndex, allowDiagonals); // full BFS
-                }
 
                 // --- Generate Debug Data  ---
                 DumpDebugIfEnabled(seed, terrainData, fallbackBuilds: _usedFallbackThisBuild ? 1 : 0);
@@ -626,14 +610,19 @@ namespace AI_Workshop03
             reached = -1; 
 
             // If reachability requirement is 0, accept without BFS
-            if (minReachablePercentClamped <= 0f) return true;
+            if (minReachablePercentClamped <= 0f)
+            {
+                reached = 0;
+                return true;
+            }
 
             if (mapReach == null)
             {
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
-                Debug.LogWarning("MapGenerator: skipping reachability check because mapReach is null.");
+                Debug.LogWarning("MapGenerator: mapReach is null while reachability gate is enabled. Failing this attempt.");
 #endif
-                return true; // keep generation running; strictness should be unchanged since I think it previously allowed null
+                reached = 0;
+                return false; // recommended: fail closed
             }
 
             // Avoid division: reachableCount / (float)walkableCount >= p  <=>  reachableCount >= ceil(p * walkableCount)      

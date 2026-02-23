@@ -37,20 +37,54 @@ namespace AI_Workshop03
             if (m_data == null) throw new InvalidOperationException("Map not generated yet.");
             if (!m_data.IsValidCellIndex(index)) throw new ArgumentOutOfRangeException(nameof(index));
 
+            bool traversalChanged = false;
+
+            // Hard coherence rule:
             if (edit.Blocked.HasValue)
-                m_data.IsBlocked[index] = edit.Blocked.Value;
+            {
+                bool newBlocked = edit.Blocked.Value;
+
+                if (m_data.IsBlocked[index] != newBlocked)
+                    traversalChanged = true;
+
+                m_data.IsBlocked[index] = newBlocked;
+
+                // if unblocked and cost invalid, repair to base
+                if (newBlocked && m_data.TerrainCosts[index] != 0)
+                {
+                    m_data.TerrainCosts[index] = 0;
+                    traversalChanged = true;
+                }
+            }
 
             if (edit.TerrainKey.HasValue)
                 m_data.TerrainTypeIds[index] = edit.TerrainKey.Value;
 
             if (edit.TerrainCost.HasValue)
-                m_data.TerrainCosts[index] = m_data.IsBlocked[index] ? 0 : edit.TerrainCost.Value;
+            {
+                traversalChanged = true;
+                m_data.TerrainCosts[index] = m_data.IsBlocked[index] ? 0 : Mathf.Max(1, edit.TerrainCost.Value);
+            }
+            else
+            {
+                // if unblocked and cost ended up non-positive, repair default
+                if (!m_data.IsBlocked[index] && m_data.TerrainCosts[index] <= 0)
+                {
+                    m_data.TerrainCosts[index] = Mathf.Max(1, _baseTerrainCost);
+                    traversalChanged = true;
+                }
+            }
 
             if (edit.BaseColor.HasValue)
                 m_data.BaseCellColors[index] = edit.BaseColor.Value;
 
             if (edit.PaintLayerId.HasValue)
                 m_data.LastPaintLayerIds[index] = edit.PaintLayerId.Value;
+
+            if (traversalChanged)
+            {
+                OnTraversalTruthMutated();
+            }
 
             if (updateVisuals)
                 _renderer2D?.MarkCellTruthChanged(index);
@@ -71,11 +105,20 @@ namespace AI_Workshop03
             if (m_data == null) throw new InvalidOperationException("Map not generated yet.");
             if (!m_data.IsValidCellIndex(index)) throw new ArgumentOutOfRangeException(nameof(index));
 
+            int safeCost = blocked ? 0 : Mathf.Max(1, terrainCost);
+
+            bool traversalChanged =
+                (m_data.IsBlocked[index] != blocked) ||
+                (m_data.TerrainCosts[index] != safeCost);
+
             m_data.IsBlocked[index] = blocked;
             m_data.TerrainTypeIds[index] = terrainKey;
-            m_data.TerrainCosts[index] = blocked ? 0 : terrainCost;
+            m_data.TerrainCosts[index] = safeCost;
             m_data.BaseCellColors[index] = baseColor;
             m_data.LastPaintLayerIds[index] = paintLayerId;
+
+            if (traversalChanged)
+                OnTraversalTruthMutated();
 
             if (updateVisuals)
                 _renderer2D?.MarkCellTruthChanged(index); // change visuals to match new terrain after truth changes

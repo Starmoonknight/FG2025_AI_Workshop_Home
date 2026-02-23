@@ -4,10 +4,10 @@ using UnityEngine;
 
 namespace AI_Workshop03
 {
+
     // MapManager.Debug.cs        -   Purpose: seed HUD + cost overlay + editor context menus
     public partial class MapManager
     {
-
 
         #region Fields - Debug Options
 
@@ -21,9 +21,10 @@ namespace AI_Workshop03
         [SerializeField] private bool _dumpFocusWeights = true;
         [SerializeField] private bool _dumpFocusWeightsVerbose = false;
 
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
-        [SerializeField] private bool _logGenerationSeed = true;
-#endif
+        [Header("Debug: MapGen Reporter")]
+        [SerializeField] private MapGenLogVerbosity _mapGenLogVerbosity = MapGenLogVerbosity.Summary;
+        [SerializeField, Min(1)] private int _mapGenAnomalyCapacity = 24;
+        [SerializeField] private bool _mapGenDumpAnomaliesOnSuccess = false;
 
 
         /*
@@ -169,15 +170,40 @@ namespace AI_Workshop03
 
 
 
-        [System.Diagnostics.Conditional("UNITY_EDITOR")]
-        [System.Diagnostics.Conditional("DEVELOPMENT_BUILD")]
-        private void LogGenerationSeed(int baseSeed, int genSeed, int orderSeed)
+        private MapGenDebugReporter CreateReporter()
         {
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
-            if (!_logGenerationSeed) return;
-            Debug.Log($"[MapManager] Generated map with seed={baseSeed} genSeed={genSeed} orderSeed={orderSeed}");
-#endif
+            return new MapGenDebugReporter(
+                _mapGenLogVerbosity,
+                _mapGenAnomalyCapacity,
+                _mapGenDumpAnomaliesOnSuccess
+            );
         }
+
+
+        private void ReportLayoutTelemetry()
+        {
+            if (_mapGenReporter == null || m_data == null || _boardRenderer == null) return;
+
+            bool autoFlipX = _renderer2D != null && _renderer2D.FlipTextureX;         // intresting syntax that means the same: _renderer2D?.FlipTextureX ?? false
+            bool autoFlipY = _renderer2D != null && _renderer2D.FlipTextureY;         // intresting syntax that means the same: _renderer2D?.FlipTextureY ?? false
+
+            float safeCellSize = Mathf.Max(0.0001f, m_data.CellTileSize);
+            int reportedX = Mathf.RoundToInt((_boardRenderer.transform.localScale.x * UNITY_PLANE_SIZE) / safeCellSize);
+            int reportedZ = Mathf.RoundToInt((_boardRenderer.transform.localScale.z * UNITY_PLANE_SIZE) / safeCellSize);
+
+            _mapGenReporter.WarnIfLayoutMismatch(
+                m_data.MinWorld, m_data.MaxWorld,
+                _boardRenderer.transform.position, m_data.GridCenter,
+                expectedX: m_data.Width,
+                expectedZ: m_data.Height,
+                reportedX: reportedX,
+                reportedZ: reportedZ,
+                autoFlipX: autoFlipX,
+                autoFlipY: autoFlipY
+            );
+        }
+
+
 
 
 #if UNITY_EDITOR
