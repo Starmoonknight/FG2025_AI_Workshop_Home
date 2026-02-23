@@ -458,9 +458,9 @@ MonoBehaviour:
   _showSeedHud: 1
   _seedHudLabel: {fileID: 332636614}
   _seedHudPrefix: 'Seed: '
-  _dumpFocusWeights: 1
-  _dumpFocusWeightsVerbose: 1
-  _logGenerationSeed: 1
+  _mapGenLogVerbosity: 2
+  _mapGenAnomalyCapacity: 24
+  _mapGenDumpAnomaliesOnSuccess: 1
   _showDebugCosts: 0
   _costLabelPrefab: {fileID: 6433729425798609155, guid: f2738bf5725d73e47b3baf4e4a0218dc, type: 3}
   _costLabelRoot: {fileID: 1524415437}

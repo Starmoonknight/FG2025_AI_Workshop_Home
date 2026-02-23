@@ -14,7 +14,7 @@ namespace AI_Workshop03
     public enum MapGenFailGate
     {
         None,
-        StartBlocked,
+        NoWalkableSeed,
         UnblockedTooLow,
         ReachabilityTooLow,
         TerrainStarvation,
@@ -48,6 +48,7 @@ namespace AI_Workshop03
         // Diagnostics
         public int resets;
         public int placementsTried;
+        public int starvedTerrains;
         public int anomalies;
         public int checkpoint;
 
@@ -96,6 +97,9 @@ namespace AI_Workshop03
 
         private bool IsSummary => _verbosity >= MapGenLogVerbosity.Summary;
         private bool IsVerbose => _verbosity >= MapGenLogVerbosity.Verbose;
+
+        private const string StackTraceSpacer = "\n";     // 1 blank line
+        // private const string StackTraceSpacer = "\n\n"; // 2 blank lines (if you want more space)
 
 
         public MapGenDebugReporter(
@@ -181,8 +185,8 @@ namespace AI_Workshop03
                 LogSummary(
                     $"[MapGen][Attempt] idx={t.attemptIndex} ok={t.success} gate={t.gate} ms={t.elapsedMs} " +
                     $"walkable={t.walkableCount} unblocked={t.unblockedCount} reached={t.reachedCount}/{t.reachableTargetCount} " +
-                    $"u01={t.unblocked01:0.###} r01={t.reachable01:0.###} " +
-                    $"resets={t.resets} placed={t.placementsTried} anomalies={t.anomalies} cp={t.checkpoint}");
+                    $"unblocked01={t.unblocked01:0.###} reachable01={t.reachable01:0.###} " +
+                    $"resets={t.resets} placed={t.placementsTried} starved={t.starvedTerrains} anomalies={t.anomalies} checkpoint={t.checkpoint}");
             }
         }
 
@@ -312,6 +316,8 @@ namespace AI_Workshop03
                 stringBuilder.AppendLine(
                    $"  buildStats attemptsTotal={(totalAttemptedBuilds >= 0 ? totalAttemptedBuilds.ToString() : "n/a")} " +
                    $"fallbacksTotal={(totalFallbackBuilds >= 0 ? totalFallbackBuilds.ToString() : "n/a")}");
+
+                stringBuilder.AppendLine();
             }
 
             if (terrainData == null || terrainData.Length == 0)
@@ -323,48 +329,50 @@ namespace AI_Workshop03
 
             for (int i = 0; i < terrainData.Length; i++)
             {
-                TerrainTypeData t = terrainData[i];
-                if (t == null) continue;
+                TerrainTypeData terrain = terrainData[i];
+                if (terrain == null) continue;
 
-                ExpansionAreaFocus focus = GetPrimaryFocus(t);
-                stringBuilder.AppendLine($"- {t.name} mode={t.Mode} coverage={t.CoveragePercent:0.###} obstacle={t.IsObstacle} focus={focus}");
+                ExpansionAreaFocus focus = GetPrimaryFocus(terrain);
+                stringBuilder.AppendLine($"- {terrain.name} mode={terrain.Mode} coverage={terrain.CoveragePercent:0.###} obstacle={terrain.IsObstacle} focus={focus}");
 
                 // Summary bonus: weighted quick-normalized info
                 if (focus == ExpansionAreaFocus.Weighted)
                 {
-                    TerrainTypeData.AreaFocusWeights w = GetPrimaryWeights(t);
-                    NormalizeWeights(w, out float pE, out float pI, out float pA, out float total);
-                    int margin = computeInteriorMarginCells(w);
+                    TerrainTypeData.AreaFocusWeights weight = GetPrimaryWeights(terrain);
+                    NormalizeWeights(weight, out float pEdge, out float pInterior, out float pAnywhere, out float total);
+                    int margin = computeInteriorMarginCells(weight);
                     int innerW = Mathf.Max(0, width - 2 * margin);
                     int innerH = Mathf.Max(0, height - 2 * margin);
 
                     if (total <= 0f)
-                        stringBuilder.Append(" norm(E/I/A)=0/0/100 interior=fallback-anywhere");
+                        stringBuilder.Append(" norm(Edge/Interior/Any)=0/0/100 interior=fallback-anywhere");
                     else
-                        stringBuilder.Append($" norm(E/I/A)={(pE * 100f):0.#}/{(pI * 100f):0.#}/{(pA * 100f):0.#} interior={innerW}x{innerH}");
+                        stringBuilder.Append($" norm(Edge/Interior/Any)={(pEdge * 100f):0.#}/{(pInterior * 100f):0.#}/{(pAnywhere * 100f):0.#} interior={innerW}x{innerH}");
                 }
 
-                stringBuilder.AppendLine();
+                stringBuilder.AppendLine(); // blank line before verbose details
 
                 if (verbose)
                 {
-                    switch (t.Mode)
+                    switch (terrain.Mode)
                     {
                     case PlacementMode.Static:
-                            AppendFocusVerbose(stringBuilder, "Static.Placement", t.Static.PlacementArea, in t.Static.PlacementWeights, width, height, computeInteriorMarginCells);
+                            AppendFocusVerbose(stringBuilder, "Static.Placement", terrain.Static.PlacementArea, in terrain.Static.PlacementWeights, width, height, computeInteriorMarginCells);
                             break;
 
                     case PlacementMode.Blob:
-                            AppendFocusVerbose(stringBuilder, "Blob.Placement", t.Blob.PlacementArea, in t.Blob.PlacementWeights, width, height, computeInteriorMarginCells);
+                            AppendFocusVerbose(stringBuilder, "Blob.Placement", terrain.Blob.PlacementArea, in terrain.Blob.PlacementWeights, width, height, computeInteriorMarginCells);
                             break;
 
                     case PlacementMode.Lichtenberg:
-                            AppendFocusVerbose(stringBuilder, "Lichtenberg.Origin", t.Lichtenberg.OriginArea, in t.Lichtenberg.OriginWeights, width, height, computeInteriorMarginCells);
-                            AppendFocusVerbose(stringBuilder, "Lichtenberg.GrowthAim", t.Lichtenberg.GrowthAimArea, in t.Lichtenberg.GrowthAimWeights, width, height, computeInteriorMarginCells);
-                            stringBuilder.AppendLine($"    EdgePresets use={t.Lichtenberg.UseEdgePairPresets} mode={t.Lichtenberg.EdgePairMode}");
-                            stringBuilder.AppendLine($"    Paths [{t.Lichtenberg.MinPathCount}..{t.Lichtenberg.MaxPathCount}] cellsPerPath={t.Lichtenberg.CellsPerPath}");
+                            AppendFocusVerbose(stringBuilder, "Lichtenberg.Origin", terrain.Lichtenberg.OriginArea, in terrain.Lichtenberg.OriginWeights, width, height, computeInteriorMarginCells);
+                            AppendFocusVerbose(stringBuilder, "Lichtenberg.GrowthAim", terrain.Lichtenberg.GrowthAimArea, in terrain.Lichtenberg.GrowthAimWeights, width, height, computeInteriorMarginCells);
+                            stringBuilder.AppendLine($"    EdgePresets use={terrain.Lichtenberg.UseEdgePairPresets} mode={terrain.Lichtenberg.EdgePairMode}");
+                            stringBuilder.AppendLine($"    Paths [{terrain.Lichtenberg.MinPathCount}..{terrain.Lichtenberg.MaxPathCount}] cellsPerPath={terrain.Lichtenberg.CellsPerPath}");
                             break;
                     }
+
+                    stringBuilder.AppendLine(); // blank line after verbose details
                 }
             }
 
@@ -486,11 +494,22 @@ namespace AI_Workshop03
             }
         }
 
-
         private void LogSummary(string msg)
         {
-            if (_verbosity >= MapGenLogVerbosity.Summary)
-                Debug.Log(msg);
+            if (_verbosity < MapGenLogVerbosity.Summary) return;
+            Debug.Log(msg + StackTraceSpacer);
+        }
+
+        private void LogWarn(string msg)
+        {
+            if (_verbosity == MapGenLogVerbosity.Off) return;
+            Debug.LogWarning(msg + StackTraceSpacer);
+        }
+
+        private void LogError(string msg)
+        {
+            if (_verbosity == MapGenLogVerbosity.Off) return;
+            Debug.LogError(msg + StackTraceSpacer);
         }
 
 
@@ -512,44 +531,3 @@ namespace AI_Workshop03
     }
 
 }
-
-       
-            
-
-
-
-
-        // ----------------------------------------------------------------------------------------------
-        // REMOVE OR KEEP PARTS OF BELOWE CODE? 
-
-
-
-
-
-        /*
-
-        public void DumpFocusWeights(
-            int width,
-            int height,
-            float[] focusWeights,
-            string filePath
-            )
-        {
-            int cellCount = checked(width * height);
-            if (focusWeights == null) throw new System.ArgumentNullException(nameof(focusWeights));
-            if (focusWeights.Length != cellCount) throw new System.ArgumentException("focusWeights length mismatch", nameof(focusWeights));
-            System.Text.StringBuilder sb = new System.Text.StringBuilder();
-            sb.AppendLine("X,Y,FocusWeight");
-            for (int y = 0; y < height; y++)
-            {
-                for (int x = 0; x < width; x++)
-                {
-                    int index = x + y * width;
-                    sb.AppendLine($"{x},{y},{focusWeights[index]}");
-                }
-            }
-            System.IO.File.WriteAllText(filePath, sb.ToString());
-            Debug.Log($"Focus weights dumped to: {filePath}");
-        }
-
-        */

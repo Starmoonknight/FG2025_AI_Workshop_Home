@@ -94,18 +94,21 @@ namespace AI_Workshop03
 
 
         // Generation trackers 
+        private MapGenDebugReporter _reporter;
         private int _attemptsThisBuild = 0;
         private bool _usedFallbackThisBuild;
 
+        // --- Attempt/build telemetry helpers ---
+        private bool _reportedNullMapReachThisBuild;
+        private int _starvedTerrainsThisAttempt;
+
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        private readonly HashSet<byte> _starvedTerrainIdsThisBuild = new();
+#endif
+
+
         public int AttemptsLastBuild => _attemptsThisBuild;
         public bool UsedFallbackLastBuild => _usedFallbackThisBuild;
-
-        // Debug Settings
-        public bool Debug_DumpFocusWeights { get; set; } = false;
-        public bool Debug_DumpFocusWeightsVerbose { get; set; } = false;
-
-
-        private static readonly MapGenDebugReporter _debugReporter = new MapGenDebugReporter();
 
 
 
@@ -236,6 +239,11 @@ namespace AI_Workshop03
          */
 
 
+        public void SetReporter(MapGenDebugReporter reporter)
+        {
+            _reporter = reporter;
+        }
+
 
         public void Generate(
             MapData data,
@@ -298,9 +306,6 @@ namespace AI_Workshop03
             if (mapReach != null && EnsureWalkableStartIndex(ref startIndex))
                 mapReach.BuildReachableFrom(data, startIndex, allowDiagonals);  // do one full BFS build on accepted map to mark reachable area for runtime use (doing multiple BFS checks during attempts can be costly on larger maps)
 
-            if (Debug_DumpFocusWeights)
-                DumpDebugIfEnabled(seed, terrainData, fallbackBuilds: _usedFallbackThisBuild ? 1 : 0);
-
         }
 
 
@@ -309,6 +314,13 @@ namespace AI_Workshop03
         {
             _attemptsThisBuild = 0;
             _usedFallbackThisBuild = false;
+
+            _reportedNullMapReachThisBuild = false;
+            _starvedTerrainsThisAttempt = 0;
+
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            _starvedTerrainIdsThisBuild.Clear();
+#endif
         }
 
         // --- Get reference pointers to current game board ---
@@ -438,24 +450,26 @@ namespace AI_Workshop03
             int minWalkableCells = ComputeMinWalkableCells(minUnblocked);
             float minReachable01 = Mathf.Clamp01(minReachablePercent);
 
-            int successAttempt = -1;
 
             for (int attempt = 0; attempt < attempts; attempt++)        // attempt placement loop, if it fails to meat the any prerequisite, generate a new map.
             {
+                _starvedTerrainsThisAttempt = 0;
+
+                _reporter?.BeginAttempt(attempt);
                 AttemptStats stats = default; stats.attempt = attempt; stats.maxBlocked = _maxBlockedBudget; stats.minWalkable = minWalkableCells;
 
-
-                // WARNING: touched undo works if this  ResetToBase() / UndoTouchedToBase() logic is correct,
+                // WARNING: touched undo works if  ResetToBase() / UndoTouchedToBase()  logic is correct,
                 // be careful when refactoring and consider implications on the undo logic when making changes here.
                 // Current precondition:
                 //      Every attempt starts from base state, and
                 //      Every cell modification during an attempt calls Touch(idx) before/when writing, and
                 //      Base map is truly unblocked, because I hard-reset _blockedCount = 0 as the map generator can only handle walkable as base tiles.
 
+
                 // Invariant: each attempt begins from the base map state.
                 // Attempt 0: full reset. Attempts 1+: undo only what prior attempt touched
-                if (attempt == 0) ResetToBase();                        // first attempt, start from a clean slate by resetting the whole map to base
-                else UndoTouchedToBase();                               // undo previous failed attempt writes instead of doing a full ResetToBase() call
+                if (attempt == 0) ResetToBase();        // first attempt, start from a clean slate by resetting the whole map to base
+                else UndoTouchedToBase();               // undo previous failed attempt writes instead of doing a full ResetToBase() call
 
 
                 // DEV NOTE: Current map is only designed to take in a base map with no blocked cells, if there are blocked cells in the base map,
@@ -471,7 +485,7 @@ namespace AI_Workshop03
                 //      Will require larger refactory to support, so for now just assert that the base map is unblocked and
                 //      consider this a potential future improvement if there is time and need for it.
 
-                BeginAttempt();                                         // set stamp id + clear touched list
+                BeginAttempt();                 // set stamp id + clear touched list
 
                 // Per-attempt placement RNG: Should be stable with "seed reproduces map", but different across attempts to give the generator a chance to try different placements.    (placement randomness inside attempt N is deterministic and reproducible)
                 _rng = new System.Random(unchecked(seed ^ ((int)0x9E3779B9 * (attempt + 1))));
@@ -479,7 +493,7 @@ namespace AI_Workshop03
 
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
                 // Cheap integrity spot-check, could run every attempt, but limited it for now.  
-                if ((attempt & 7) == 0)                                 // runs every 8th attempt
+                if ((attempt & 7) == 0)         // runs every 8th attempt
                 {
                     int recomputedBlocked = 0;
                     int nonBasePaint = 0;
@@ -503,12 +517,36 @@ namespace AI_Workshop03
 
                 if (!EnsureWalkableStartIndex(ref startIndex))          // BuildReachableFrom() will need a valkable startIndex to validate the board 
                 {
-                    stats.gate = FailGate.NoWalkableSeed; RecordAttempt(stats); continue;
+                    stats.gate = FailGate.NoWalkableSeed;
+                    RecordAttempt(stats);
+
+                    ReportAttempt(
+                        attemptIndex: attempt,
+                        success: false,
+                        gate: MapGenFailGate.NoWalkableSeed, 
+                        walkableCount: WalkableCount,
+                        reachedCount: 0,
+                        reachableTargetCount: 0,
+                        placementsTried: _scratch.touched.Count,
+                        checkpoint: 10
+                    );
+                    continue;
                 }
 
                 if (!MeetsUnblockedPercent(minWalkableCells, out int walkableCount))    // If map does not meet walkable space requirement, fail and try again
                 {
-                    stats.gate = FailGate.UnblockedTooLow; RecordAttempt(stats); continue;
+                    stats.gate = FailGate.UnblockedTooLow; 
+                    RecordAttempt(stats);
+
+                    ReportAttempt(
+                        attempt, false, MapGenFailGate.UnblockedTooLow,
+                        walkableCount: WalkableCount,
+                        reachedCount: 0,
+                        reachableTargetCount: minWalkableCells,
+                        placementsTried: _scratch.touched.Count,
+                        checkpoint: 20
+                    );
+                    continue;
                 }
 
                 int minReachableCells = Mathf.Clamp(
@@ -519,29 +557,72 @@ namespace AI_Workshop03
 
                 if (!MeetsReachability(data, startIndex, walkableCount, minReachable01, allowDiagonals, mapReach, out stats.reached))  // use startIndex to validate the board’s navigability,
                 {
-                    stats.gate = FailGate.ReachabilityTooLow; RecordAttempt(stats); continue;
+                    stats.gate = FailGate.ReachabilityTooLow; 
+                    RecordAttempt(stats);
+
+                    ReportAttempt(
+                        attempt, false, MapGenFailGate.ReachabilityTooLow,
+                        walkableCount: walkableCount,
+                        reachedCount: Mathf.Max(0, stats.reached),
+                        reachableTargetCount: minReachableCells,
+                        placementsTried: _scratch.touched.Count,
+                        checkpoint: 30
+                    );
+                    continue;
                 }
 
 
-                // --- Successful Generation Branch ---                         // The generated map fullfils base requirements, continue to finnishing touches 
-                FinalizeWalkableTerrains(walkablesList, terrainDataId);         // reset walkable tiles to base visuals/cost/id so terrain can build from clean base
-                stats.gate = FailGate.None; RecordAttempt(stats);
+                // --- Successful Generation Branch ---                     // The generated map fullfils base requirements, continue to finnishing touches 
+                FinalizeWalkableTerrains(walkablesList, terrainDataId);     // reset walkable tiles to base visuals/cost/id so terrain can build from clean base
+                stats.gate = FailGate.None; 
+                RecordAttempt(stats);
 
-                // --- Generate Debug Data  ---
-                DumpDebugIfEnabled(seed, terrainData, fallbackBuilds: _usedFallbackThisBuild ? 1 : 0);
-                successAttempt = attempt;
+                ReportAttempt(
+                    attempt, true, MapGenFailGate.None,
+                    walkableCount: walkableCount,
+                    reachedCount: Mathf.Max(0, stats.reached),
+                    reachableTargetCount: minReachableCells,
+                    placementsTried: _scratch.touched.Count,
+                    checkpoint: 40
+                );
 
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
-                Debug.Log($"[MapGen] baseSeed={seed} orderSeed={orderSeed} successAttempt={successAttempt} attemptsUsed={_attemptsThisBuild}");
-#endif
                 return true;
             }
 
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
-            Debug.Log($"[MapGen] baseSeed={seed} orderSeed={orderSeed} FAILED attemptsUsed={_attemptsThisBuild}");
-#endif
-
             return false;
+
+
+            void ReportAttempt(int attemptIndex, bool success, MapGenFailGate gate,
+                   int walkableCount, int reachedCount, int reachableTargetCount,
+                   int placementsTried, int checkpoint = 0)
+            {
+                if (_reporter == null) return;
+
+                var t = new MapGenAttemptTelemetry
+                {
+                    attemptIndex = attemptIndex,
+                    success = success,
+                    gate = gate,
+
+                    walkableCount = walkableCount,
+                    unblockedCount = walkableCount, 
+                    reachedCount = reachedCount,
+                    reachableTargetCount = reachableTargetCount,
+
+                    unblocked01 = (_cellCount > 0) ? (walkableCount / (float)_cellCount) : 0f,
+                    reachable01 = (walkableCount > 0) ? (reachedCount / (float)walkableCount) : 0f,
+
+                    // 1 = full reset (attempt 0), 2 = undo reset (attempt > 0)
+                    resets = (attemptIndex == 0) ? 1 : 2,   // attempt reset happened
+                    placementsTried = placementsTried,
+                    anomalies = 0,                          // might be missleading to default to 0, should change to write only if any exist 
+                    checkpoint = checkpoint, 
+
+                    starvedTerrains = _starvedTerrainsThisAttempt,
+                };
+
+                _reporter.EndAttempt(ref t);
+            }
         }
 
 
@@ -616,13 +697,17 @@ namespace AI_Workshop03
                 return true;
             }
 
+
             if (mapReach == null)
             {
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
-                Debug.LogWarning("MapGenerator: mapReach is null while reachability gate is enabled. Failing this attempt.");
-#endif
+                if (!_reportedNullMapReachThisBuild)
+                {
+                    _reportedNullMapReachThisBuild = true;
+                    _reporter?.RecordAnomaly("mapReach was null while reachability gate enabled; failing attempts.");
+                }
+
                 reached = 0;
-                return false; // recommended: fail closed
+                return false;
             }
 
             // Avoid division: reachableCount / (float)walkableCount >= p  <=>  reachableCount >= ceil(p * walkableCount)      
@@ -632,8 +717,12 @@ namespace AI_Workshop03
                 0, walkableCount
             );
 
-            // if only need 0 or 1 reachable cell, and startIndex is ensured walkable, then this is trivially satisfied
-            if (minReachableCells <= 1) return true;
+            // if only need 0 or 1 reachable cell, and startIndex is ensured walkable 
+            if (minReachableCells <= 1)
+            {
+                reached = 1; // startIndex is walkable at this point
+                return true;
+            }
 
             // do only partial BFS build to check if reachable cells meet the minReachableCells requirement, avoid full BFS build for performance if requirement is not met
             return mapReach.HasAtLeastReachable(data, startIndex, allowDiagonals, minReachableCells, out reached);
@@ -662,21 +751,6 @@ namespace AI_Workshop03
         }
 
 
-        private void DumpDebugIfEnabled(int seed, TerrainTypeData[] terrainData, int fallbackBuilds)
-        {
-            if (!Debug_DumpFocusWeights)
-                return;
-
-            _debugReporter.DumpFocusWeights(
-                seed, _width, _height, terrainData,
-                Debug_DumpFocusWeightsVerbose,
-                areaWeights => ComputeInteriorMarginCells(in areaWeights),
-                totalAttemptedBuilds: _attemptsThisBuild,
-                totalFallbackBuilds: fallbackBuilds
-            );
-        }
-
-
         private void RunFallbackBranch(
             int seed,
             TerrainTypeData[] terrainData,
@@ -686,9 +760,7 @@ namespace AI_Workshop03
         {
             ResetWalkableToBaseOnly();
             _usedFallbackThisBuild = true;
-
-            // --- Generate Debug Data  ---
-            DumpDebugIfEnabled(seed, terrainData, fallbackBuilds: 1);
+            _reporter?.MarkFallbackUsed();
 
             // Place walkables on the last attempt’s obstacle map
             for (int i = 0; i < walkablesList.Count; i++)
@@ -740,9 +812,16 @@ namespace AI_Workshop03
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
             if (_scratch.cells.Count == 0)
             {
-                // Telemetry-only: terrain produced nothing this attempt.
-                // Later refine this to "couldn't find seed after X tries".
-                // RecordStarved(terrain, terrainLayerId);
+                _starvedTerrainsThisAttempt++;
+
+                // Record once per terrain per build (prevent spam)
+                if (_starvedTerrainIdsThisBuild.Add(terrainLayerId))
+                {
+                    _reporter?.RecordAnomaly(
+                        $"[TerrainStarvation] '{terrain.name}' (layerId={terrainLayerId}) produced 0 cells at least once this build.");
+                }
+
+                return;
             }
 #endif
 

@@ -17,10 +17,6 @@ namespace AI_Workshop03
         [SerializeField] private TMPro.TextMeshProUGUI _seedHudLabel;
         [SerializeField] private string _seedHudPrefix = "Seed: ";
 
-        [Header("Debug: Generation")]
-        [SerializeField] private bool _dumpFocusWeights = true;
-        [SerializeField] private bool _dumpFocusWeightsVerbose = false;
-
         [Header("Debug: MapGen Reporter")]
         [SerializeField] private MapGenLogVerbosity _mapGenLogVerbosity = MapGenLogVerbosity.Summary;
         [SerializeField, Min(1)] private int _mapGenAnomalyCapacity = 24;
@@ -201,6 +197,9 @@ namespace AI_Workshop03
                 autoFlipX: autoFlipX,
                 autoFlipY: autoFlipY
             );
+
+            if (_renderer2D != null && _renderer2D.FlipChangedThisRebuild)
+                _mapGenReporter.RecordAnomaly($"Texture flip changed this rebuild: X={_renderer2D.FlipTextureX} Y={_renderer2D.FlipTextureY}");
         }
 
 

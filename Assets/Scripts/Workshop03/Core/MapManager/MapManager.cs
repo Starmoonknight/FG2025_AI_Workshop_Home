@@ -1,4 +1,3 @@
-using NUnit.Framework.Constraints;
 using System;
 using System.Collections;
 using UnityEngine;
@@ -72,7 +71,7 @@ namespace AI_Workshop03
 
         private MapData m_data;
         private MapReachability m_reachability;
-        private MapGenDebugReporter _mapGenReporter;
+        private MapGenDebugReporter _mapGenReporter;            // rename _debugReporter
         private Coroutine _visualsReadyCoroutine;
 
         private readonly MapGenerator m_generator = new MapGenerator();
@@ -172,6 +171,7 @@ namespace AI_Workshop03
             UpdateSeedHud();
 
             _mapGenReporter = CreateReporter();
+            m_generator.SetReporter(_mapGenReporter);
             _mapGenReporter.BeginRun(
                 seed: baseSeed,
                 genSeed: genSeed,
@@ -213,18 +213,6 @@ namespace AI_Workshop03
                 // Base truth       - configure base terrain (walkable land, cost 10    /or whatever _baseTerrainCost is) in the data arrays
                 m_data.ConfigureBase((byte)TerrainID.Land, _baseTerrainCost, _walkableColor);
                 
-
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
-                m_generator.Debug_DumpFocusWeights = _dumpFocusWeights;
-                m_generator.Debug_DumpFocusWeightsVerbose = _dumpFocusWeightsVerbose;
-#else
-                m_generator.Debug_DumpFocusWeights = false;
-                m_generator.Debug_DumpFocusWeightsVerbose = false;
-#endif
-
-                // NOTE: Later when MapGenerator supports it:
-                // m_generator.SetReporter(_mapGenReporter);
-
 
                 // Call the BoardGenerator to generate the map by running terrain generation into the existing MapData arrays (single source of truth)
                 m_generator.Generate(
@@ -275,8 +263,7 @@ namespace AI_Workshop03
                     );
 
 
-                // Notify listeners that map has been rebuilt
-                ReportLayoutTelemetry();
+                // Notify listeners that map has been rebuilt                
                 HandleMapRebuiltInternal();
 
 
@@ -291,7 +278,45 @@ namespace AI_Workshop03
             }
             finally
             {
-                _mapGenReporter.EndRun(runSuccess, runEx);
+                /*
+                if (runSuccess && _mapGenLogVerbosity >= MapGenLogVerbosity.Verbose && _mapGenReporter != null)
+                {
+                    // maybe move:
+                    // _mapGenReporter.DumpFocusWeights(...);
+                }
+                */
+
+                if (!runSuccess) _mapGenReporter?.RecordAnomaly("Run failed; report may be partial.");
+
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                if (_mapGenLogVerbosity >= MapGenLogVerbosity.Verbose && _mapGenReporter != null)
+                {
+                    int ComputeMargin(TerrainTypeData.AreaFocusWeights weight)
+                    {
+                        float percent = Mathf.Clamp(weight.InteriorMarginPercent, 0f, 0.49f);
+                        int minDim = Mathf.Min(_width, _height);
+                        int maxMargin = Mathf.Max(0, (minDim - 1) / 2);
+
+                        int marginByPercent = Mathf.RoundToInt(minDim * percent);
+                        int margin = Mathf.Max(Mathf.Max(0, weight.InteriorMinMargin), marginByPercent);
+
+                        return Mathf.Clamp(margin, 0, maxMargin);
+                    }
+
+                    _mapGenReporter.DumpFocusWeights(
+                        seed: baseSeed,
+                        width: _width,
+                        height: _height,
+                        terrainData: _terrainData,
+                        computeInteriorMarginCells: ComputeMargin,
+                        totalAttemptedBuilds: m_generator.AttemptsLastBuild,
+                        totalFallbackBuilds: m_generator.UsedFallbackLastBuild ? 1 : 0
+                    );
+                }
+#endif
+
+                _mapGenReporter?.EndRun(runSuccess, runEx);
+
             }
         }
 
@@ -319,6 +344,7 @@ namespace AI_Workshop03
         private IEnumerator InvokeVisualsReadyEndOfFrame()
         {
             yield return m_waitForEndOfFrame;
+            ReportLayoutTelemetry();
             OnMapRebuiltVisualsReady?.Invoke(m_data);
             _visualsReadyCoroutine = null;
         }

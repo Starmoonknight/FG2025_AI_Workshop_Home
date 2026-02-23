@@ -19,6 +19,13 @@ namespace AI_Workshop03
         [SerializeField] private bool _flipTextureX;
         [SerializeField] private bool _flipTextureY;
 
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        private bool _lastFlipX;
+        private bool _lastFlipY;
+        private bool _flipInitialized;
+#endif
+
+
         private MapData _data;
 
         private Color32[] _cellColors;
@@ -41,6 +48,7 @@ namespace AI_Workshop03
         public Color BoardTint => _boardTint;
         public bool FlipTextureX => _flipTextureX;
         public bool FlipTextureY => _flipTextureY;
+        public bool FlipChangedThisRebuild { get; private set; }
 
 
         #endregion
@@ -176,7 +184,10 @@ namespace AI_Workshop03
             // using a property block should allow me to change texture by effecting material properties per renderer,
             // without making a new one each time, and "should" protect other objects using the same mat, I think.. 
 
-            // Decided to go with using MPB (material property block) for now
+            // NO LONGER TRUE
+            // Decided to go with using MPB (material property block) for now,
+            // but keeping comments for progression lookback. And still need to read up on mpb 
+
 
             var rend = TargetRenderer;
             if (rend == null || _gridTexture == null) return;
@@ -228,14 +239,32 @@ namespace AI_Workshop03
             if (!ok0 || !okX || !okZ) return;
 
             // if moving +X makes U go down, the texture should be fixed by flipping X
-            _flipTextureX = uvX.x < uv0.x;
+            bool newX = uvX.x < uv0.x;
 
             // if moving +Z makes V go down, the texture should be fixed by flipping Y
-            _flipTextureY = uvZ.y < uv0.y;
+            bool newY = uvZ.y < uv0.y;
 
-            Debug.Log($"AutoFlip: X={_flipTextureX}, Y={_flipTextureY}");
 
-            EnsureBuffers();
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            if (!_flipInitialized || newX != _lastFlipX || newY != _lastFlipY)
+            {
+                _flipInitialized = true;
+                _lastFlipX = _flipTextureX;
+                _lastFlipY = _flipTextureY;
+
+                // change this to call a reporter anomaly hook via MapManager later
+            }
+#endif
+
+            FlipChangedThisRebuild = (newX != _flipTextureX) || (newY != _flipTextureY);
+            _flipTextureX = newX;
+            _flipTextureY = newY;
+
+            if (FlipChangedThisRebuild)
+            {
+                EnsureBuffers();        // flip affects _texturePixels allocation
+                _textureDirty = true;   // ensure visuals update
+            }
         }
 
         private static bool TryUVAtWorldPoint(Collider col, Vector3 rayOrigin, out Vector2 uv)
