@@ -82,7 +82,7 @@ namespace AI_Workshop03
         // Board settings 
         public int Width { get; private set; }                  // Grid width in cells (X dimension)
         public int Height { get; private set; }                 // Grid height in cells (Y dimension)
-        public int CellCount => Width * Height;                 // Total cells in grid (Width * Height)
+        public int CellCount => checked(Width * Height);        // Total cells in grid (Width * Height)
         public int MapGenSeed { get; private set; }             // Seed that was used to generate this map stored MapData  (0 = random)
         public int BuildId { get; private set; }                // What generation is this map 
 

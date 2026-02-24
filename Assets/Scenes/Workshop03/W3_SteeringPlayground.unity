@@ -436,7 +436,7 @@ MonoBehaviour:
   _height: 100
   _baseTerrainCost: 10
   _allowDiagonalTraversal: 1
-  _seed: 0
+  _seed: 356551437
   _lastGeneratedSeed: 0
   _minUnblockedPercent: 0.5
   _minReachablePercent: 0.75
@@ -910,8 +910,8 @@ MonoBehaviour:
   m_followSmooth: 8
   m_keepOffsetOnSwitch: 1
   m_fixedOffset: {x: 0, y: 8, z: -8}
-  m_cellsPerScrollNotch: 3
-  m_scrollSensitivity: 2
+  m_cellsPerScrollNotch: 20
+  m_scrollSensitivity: 5
   m_edgePaddingCells: 0.5
   m_cellSizeWorld: 1
   m_followViewCells: 15

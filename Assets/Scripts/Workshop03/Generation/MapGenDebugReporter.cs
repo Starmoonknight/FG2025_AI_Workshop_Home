@@ -271,14 +271,14 @@ namespace AI_Workshop03
             {
                 Debug.LogWarning(
                     $"[MapGen][LayoutMismatch] expected={expectedX}x{expectedZ} reported={reportedX}x{reportedZ} " +
-                    $"rendererPos={rendererPos} gridCenter={gridCenter} min={minWorld} max={maxWorld} " +
+                    $"rendererPos={rendererPos} gridCenter={gridCenter} minTile={minWorld} maxTile={maxWorld} " +
                     $"autoFlip=({autoFlipX},{autoFlipY})");
             }
             else if (_verbosity >= MapGenLogVerbosity.Verbose)
             {
                 LogSummary(
                     $"[MapGen][LayoutOK] expected={expectedX}x{expectedZ} reported={reportedX}x{reportedZ} " +
-                    $"rendererPos={rendererPos} gridCenter={gridCenter}");
+                    $"rendererPos={rendererPos} gridCenter={gridCenter} minTile={minWorld} maxTile={maxWorld}");
             }
         }
 
@@ -332,8 +332,15 @@ namespace AI_Workshop03
                 TerrainTypeData terrain = terrainData[i];
                 if (terrain == null) continue;
 
-                ExpansionAreaFocus focus = GetPrimaryFocus(terrain);
-                stringBuilder.AppendLine($"- {terrain.name} mode={terrain.Mode} coverage={terrain.CoveragePercent:0.###} obstacle={terrain.IsObstacle} focus={focus}");
+                ExpansionAreaFocus focus = GetPrimaryFocus(terrain);                
+                if(!verbose)
+                {
+                    stringBuilder.AppendLine($"- {terrain.name} mode={terrain.Mode} coverage={terrain.CoveragePercent:0.###} obstacle={terrain.IsObstacle} focus={focus}");
+                }
+                else
+                {
+                    stringBuilder.AppendLine($"    - Summary: {terrain.name} mode={terrain.Mode} coverage={terrain.CoveragePercent:0.###} obstacle={terrain.IsObstacle} focus={focus}");
+                }
 
                 // Summary bonus: weighted quick-normalized info
                 if (focus == ExpansionAreaFocus.Weighted)
@@ -350,7 +357,7 @@ namespace AI_Workshop03
                         stringBuilder.Append($" norm(Edge/Interior/Any)={(pEdge * 100f):0.#}/{(pInterior * 100f):0.#}/{(pAnywhere * 100f):0.#} interior={innerW}x{innerH}");
                 }
 
-                stringBuilder.AppendLine(); // blank line before verbose details
+                stringBuilder.AppendLine(); // blank line before next details
 
                 if (verbose)
                 {
@@ -372,6 +379,8 @@ namespace AI_Workshop03
                             break;
                     }
 
+                    stringBuilder.AppendLine(); // blank line after verbose details
+                    stringBuilder.AppendLine("----------------------------------");     // added this for extra-extra clarity 
                     stringBuilder.AppendLine(); // blank line after verbose details
                 }
             }

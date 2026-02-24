@@ -145,6 +145,8 @@ namespace AI_Workshop03
         private void Start()
         {
 
+            Debug.Log($"maxTextureSize={SystemInfo.maxTextureSize}");
+
             GenerateNewGameBoard();
             
         }
